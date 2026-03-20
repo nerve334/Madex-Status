@@ -109,31 +109,39 @@ async function syncSystem(system: PublicSystem): Promise<void> {
     db.prepare('UPDATE public_systems SET status = ? WHERE id = ?').run(newStatus, system.id);
     console.log(`[Provider Status] ${system.name}: ${system.status} → ${newStatus} (from ${match.name})`);
   }
-
-  // Record heartbeat for history
-  db.prepare('INSERT INTO public_system_heartbeats (system_id, status) VALUES (?, ?)').run(system.id, newStatus);
-
-  // Prune old heartbeats (keep last 100 per system)
-  db.prepare(`DELETE FROM public_system_heartbeats WHERE system_id = ? AND id NOT IN (
-    SELECT id FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 100
-  )`).run(system.id, system.id);
 }
 
 let syncTimer: NodeJS.Timeout | null = null;
+
+function recordAllHeartbeats(): void {
+  const allSystems = db.prepare('SELECT id, status FROM public_systems ORDER BY display_order ASC').all() as any[];
+  const insertStmt = db.prepare('INSERT INTO public_system_heartbeats (system_id, status) VALUES (?, ?)');
+  const pruneStmt = db.prepare(`DELETE FROM public_system_heartbeats WHERE system_id = ? AND id NOT IN (
+    SELECT id FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 100
+  )`);
+
+  for (const s of allSystems) {
+    insertStmt.run(s.id, s.status);
+    pruneStmt.run(s.id, s.id);
+  }
+}
 
 async function runSync(): Promise<void> {
   const systems = db.prepare(
     "SELECT * FROM public_systems WHERE auto_status = 1 AND provider_url != '' AND provider_component != ''"
   ).all() as PublicSystem[];
 
-  if (systems.length === 0) return;
+  if (systems.length > 0) {
+    // Clear response cache before each full sync cycle
+    responseCache.clear();
 
-  // Clear response cache before each full sync cycle
-  responseCache.clear();
-
-  for (const system of systems) {
-    await syncSystem(system);
+    for (const system of systems) {
+      await syncSystem(system);
+    }
   }
+
+  // Always record heartbeats for ALL systems (even those without provider sync)
+  recordAllHeartbeats();
 }
 
 export function startProviderSync(intervalMs = 120_000): void {
