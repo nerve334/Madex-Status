@@ -80,7 +80,7 @@ const PublicStatus: React.FC = () => {
             )}
           </div>
           <div className="pointer-events-auto">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white uppercase flex flex-col md:flex-row items-center gap-x-4">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white uppercase flex flex-col md:flex-row items-center justify-center gap-x-4 w-full text-center">
               <span>{brandName.split(' ')[0]}</span>
               <span className="text-brand">{brandName.split(' ').slice(1).join(' ') || 'Status'}</span>
             </h1>
@@ -119,6 +119,14 @@ const PublicStatus: React.FC = () => {
                   <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-md bg-dark-950/50 border border-white/5 ${getStatusColor(system.status)}`}>
                     {getStatusLabel(system.status)}
                   </span>
+                  {/* Heartbeat bar */}
+                  {system.heartbeats && system.heartbeats.length > 0 && (
+                    <div className="flex items-end gap-[2px] h-6 mt-4 w-full">
+                      {system.heartbeats.map((hb: any, i: number) => (
+                        <div key={i} className={`flex-1 h-full rounded-[2px] ${getStatusDot(hb.status)} hover:brightness-125 transition-all`} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

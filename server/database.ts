@@ -76,6 +76,16 @@ export function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS public_system_heartbeats (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      system_id INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'operational',
+      timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (system_id) REFERENCES public_systems(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_ps_heartbeats_system_time ON public_system_heartbeats(system_id, timestamp DESC);
+
     CREATE TABLE IF NOT EXISTS incidents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       title TEXT NOT NULL,

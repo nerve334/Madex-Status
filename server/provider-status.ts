@@ -109,6 +109,14 @@ async function syncSystem(system: PublicSystem): Promise<void> {
     db.prepare('UPDATE public_systems SET status = ? WHERE id = ?').run(newStatus, system.id);
     console.log(`[Provider Status] ${system.name}: ${system.status} → ${newStatus} (from ${match.name})`);
   }
+
+  // Record heartbeat for history
+  db.prepare('INSERT INTO public_system_heartbeats (system_id, status) VALUES (?, ?)').run(system.id, newStatus);
+
+  // Prune old heartbeats (keep last 100 per system)
+  db.prepare(`DELETE FROM public_system_heartbeats WHERE system_id = ? AND id NOT IN (
+    SELECT id FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 100
+  )`).run(system.id, system.id);
 }
 
 let syncTimer: NodeJS.Timeout | null = null;

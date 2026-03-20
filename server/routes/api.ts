@@ -482,7 +482,7 @@ router.get('/public/status', (_req: Request, res: Response) => {
   for (const s of settings) settingsMap[s.key] = s.value;
 
   res.json({
-    systems,
+    systems: systemsWithHeartbeats,
     incidents,
     monitors: monitorPublicData,
     settings: {
