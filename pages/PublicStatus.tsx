@@ -126,15 +126,23 @@ const PublicStatus: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {systems.map((system: any) => {
                 const hbs = system.heartbeats || [];
+                const realHbs = hbs.filter((h: any) => h.status !== 'empty' && h.status);
+                const upCount = realHbs.filter((h: any) => h.status === 'up').length;
+                const sysUptime = realHbs.length > 0 ? ((upCount / realHbs.length) * 100).toFixed(1) : '100.0';
+                const latestRT = realHbs.length > 0 ? realHbs[realHbs.length - 1]?.response_time || 0 : 0;
                 return (
                 <div key={system.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-2xl pointer-events-auto">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-1">
                     <h3 className="font-black text-2xl text-zinc-100 tracking-tight">{system.name}</h3>
                     <div className={`w-3 h-3 rounded-full ${getStatusDot(system.status)} animate-pulse`}></div>
                   </div>
+                  <div className="flex items-center gap-4 mb-4">
+                    {latestRT > 0 && <span className="text-xs text-zinc-500 font-mono">{latestRT}ms</span>}
+                    <span className="text-xs text-zinc-600 font-mono">{sysUptime}% uptime</span>
+                  </div>
 
                   {/* Heartbeat bar */}
-                  <div className="flex items-end gap-[2px] h-[24px]">
+                  <div className="flex items-end h-[24px]" style={{ gap: '3px' }}>
                     {(() => {
                       const maxBars = 20;
                       const padded = [
@@ -191,7 +199,7 @@ const PublicStatus: React.FC = () => {
                       <div className={`w-3.5 h-3.5 rounded-full ${monitor.status === 'up' ? 'bg-brand' : monitor.status === 'pending' ? 'bg-zinc-500' : 'bg-rose-500'} animate-pulse`}></div>
                     </div>
                     {/* Heartbeat bar */}
-                    <div className="flex items-end gap-[2px] h-[24px]">
+                    <div className="flex items-end h-[24px]" style={{ gap: '3px' }}>
                       {(() => {
                         const maxBars = 20;
                         const padded = [
