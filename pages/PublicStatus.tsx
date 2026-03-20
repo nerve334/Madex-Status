@@ -22,6 +22,18 @@ const getStatusDot = (status: string) => {
   return 'bg-rose-500';
 };
 
+const getHeartbeatColor = (status: string) => {
+  if (status === 'up' || status === 'operational') return 'bg-brand hover:bg-brand/80';
+  if (status === 'degraded') return 'bg-yellow-400 hover:bg-yellow-300';
+  if (status === 'pending') return 'bg-zinc-600 hover:bg-zinc-500';
+  return 'bg-rose-500 hover:bg-rose-400';
+};
+
+const formatTime = (ts: string) => {
+  const d = new Date(ts + 'Z');
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+};
+
 const PublicStatus: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [now, setNow] = useState(new Date());
@@ -110,25 +122,63 @@ const PublicStatus: React.FC = () => {
               <div className="h-px bg-dark-800 flex-1"></div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-              {systems.map((system: any) => (
+              {systems.map((system: any) => {
+                const hbs = system.heartbeats || [];
+                const firstTime = hbs.length > 0 ? formatTime(hbs[0].timestamp) : '';
+                const lastTime = hbs.length > 0 ? formatTime(hbs[hbs.length - 1].timestamp) : '';
+                const latestRT = hbs.length > 0 ? hbs[hbs.length - 1].response_time : 0;
+                return (
                 <div key={system.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-2xl pointer-events-auto">
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center justify-between mb-2">
                     <h3 className="font-black text-2xl text-zinc-100 tracking-tight">{system.name}</h3>
-                    <div className={`w-3 h-3 rounded-full ${getStatusDot(system.status)} animate-pulse`}></div>
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
+                      system.status === 'operational' 
+                        ? 'bg-brand text-white' 
+                        : system.status === 'degraded' ? 'bg-yellow-400 text-dark-950'
+                        : 'bg-rose-500 text-white'
+                    }`}>
+                      {system.status === 'operational' ? 'Up' : system.status === 'degraded' ? 'Degraded' : 'Down'}
+                    </span>
                   </div>
-                  <span className={`text-[10px] font-black uppercase tracking-[0.2em] px-2 py-0.5 rounded-md bg-dark-950/50 border border-white/5 ${getStatusColor(system.status)}`}>
-                    {getStatusLabel(system.status)}
-                  </span>
-                  {/* Heartbeat bar */}
-                  {system.heartbeats && system.heartbeats.length > 0 && (
-                    <div className="flex items-end gap-[2px] h-6 mt-4 w-full">
-                      {system.heartbeats.map((hb: any, i: number) => (
-                        <div key={i} className={`flex-1 h-full rounded-[2px] ${getStatusDot(hb.status)} hover:brightness-125 transition-all`} />
-                      ))}
-                    </div>
-                  )}
+
+                  {/* Uptime Kuma-style heartbeat bar */}
+                  <div className="mt-5">
+                    {hbs.length > 0 ? (
+                      <>
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{firstTime}</span>
+                          <div className="flex items-end gap-[2px] h-[28px] flex-1">
+                            {hbs.map((hb: any, i: number) => (
+                              <div
+                                key={i}
+                                className={`flex-1 rounded-[3px] cursor-default transition-all duration-150 ${getHeartbeatColor(hb.status)}`}
+                                style={{ height: '100%' }}
+                                title={`${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : hb.status === 'down' ? 'Down' : hb.status}${hb.response_time ? ` (${hb.response_time}ms)` : ''}`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{lastTime}</span>
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <span className="text-[10px] text-zinc-600 font-mono">
+                            Check every {system.check_interval || 60}s
+                          </span>
+                          {latestRT > 0 && (
+                            <span className="text-[10px] text-zinc-500 font-mono">{latestRT}ms</span>
+                          )}
+                        </div>
+                      </>
+                    ) : (
+                      <div className="flex items-end gap-[2px] h-[28px]">
+                        {Array.from({ length: 30 }).map((_, i) => (
+                          <div key={i} className="flex-1 h-full rounded-[3px] bg-zinc-800" />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}
@@ -167,38 +217,65 @@ const PublicStatus: React.FC = () => {
               <div className="h-px bg-dark-800 flex-1"></div>
             </div>
             <div className="space-y-6">
-              {monitors.map((monitor: any) => (
+              {monitors.map((monitor: any) => {
+                const mhbs = monitor.heartbeats || [];
+                const mFirstTime = mhbs.length > 0 ? formatTime(mhbs[0].timestamp) : '';
+                const mLastTime = mhbs.length > 0 ? formatTime(mhbs[mhbs.length - 1].timestamp) : '';
+                return (
                 <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-                    <div className="flex items-center gap-6">
-                      <div className={`p-3 rounded-2xl border border-white/5 ${monitor.status === 'up' ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
-                        <Globe className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
-                        <div className="flex items-center gap-4 mt-1">
-                          <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${monitor.status === 'up' ? 'bg-brand/10 text-brand border-brand/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
-                            {monitor.status === 'up' ? 'Operational' : 'Down'}
-                          </span>
-                          {monitor.responseTime > 0 && (
-                            <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
-                          )}
-                          <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
+                  <div className="flex flex-col gap-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-5">
+                        <div className={`p-3 rounded-2xl border border-white/5 ${monitor.status === 'up' ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
+                          <Globe className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
+                          <div className="flex items-center gap-4 mt-1">
+                            {monitor.responseTime > 0 && (
+                              <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
+                            )}
+                            <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
+                          </div>
                         </div>
                       </div>
+                      <span className={`px-4 py-2 rounded-full text-sm font-black uppercase tracking-wider ${
+                        monitor.status === 'up' 
+                          ? 'bg-brand text-white' 
+                          : 'bg-rose-500 text-white'
+                      }`}>
+                        {monitor.status === 'up' ? 'Up' : 'Down'}
+                      </span>
                     </div>
-                    {/* Mini heartbeat bar */}
-                    <div className="flex items-end gap-[2px] h-8 lg:w-64 shrink-0">
-                      {monitor.heartbeats.map((hb: any, i: number) => (
-                        <div key={i} className={`flex-1 h-full rounded-[2px] ${hb.status === 'up' ? 'bg-brand' : 'bg-rose-500'} hover:brightness-125 transition-all`} />
-                      ))}
-                      {monitor.heartbeats.length === 0 && (
-                        <div className="flex-1 h-full rounded-[2px] bg-zinc-800" />
+                    {/* Uptime Kuma-style heartbeat bar */}
+                    <div>
+                      {mhbs.length > 0 ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mFirstTime}</span>
+                          <div className="flex items-end gap-[2px] h-[28px] flex-1">
+                            {mhbs.map((hb: any, i: number) => (
+                              <div
+                                key={i}
+                                className={`flex-1 rounded-[3px] cursor-default transition-all duration-150 ${getHeartbeatColor(hb.status)}`}
+                                style={{ height: '100%' }}
+                                title={`${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}`}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mLastTime}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-end gap-[2px] h-[28px]">
+                          {Array.from({ length: 30 }).map((_, i) => (
+                            <div key={i} className="flex-1 h-full rounded-[3px] bg-zinc-800" />
+                          ))}
+                        </div>
                       )}
                     </div>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
         )}

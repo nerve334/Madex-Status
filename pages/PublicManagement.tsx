@@ -23,6 +23,8 @@ const PublicManagement: React.FC = () => {
   const [newSystem, setNewSystem] = useState({ name: '', status: 'operational' });
   const [editingProvider, setEditingProvider] = useState<number | null>(null);
   const [providerForm, setProviderForm] = useState({ provider_url: '', provider_component: '' });
+  const [editingCheckUrl, setEditingCheckUrl] = useState<number | null>(null);
+  const [checkUrlForm, setCheckUrlForm] = useState({ check_url: '', check_interval: 60 });
   const [newIncident, setNewIncident] = useState({ title: '', description: '', system_id: '', impact_status: 'major' });
 
   const fetchData = useCallback(async () => {
@@ -67,6 +69,15 @@ const PublicManagement: React.FC = () => {
       provider_component: providerForm.provider_component,
     });
     setEditingProvider(null);
+    await fetchData();
+  };
+
+  const handleSaveCheckUrl = async (id: number) => {
+    await updatePublicSystem(id, {
+      check_url: checkUrlForm.check_url,
+      check_interval: checkUrlForm.check_interval,
+    });
+    setEditingCheckUrl(null);
     await fetchData();
   };
 
@@ -181,6 +192,42 @@ const PublicManagement: React.FC = () => {
               )}
 
               <button onClick={() => handleDeleteSystem(system.id)} className="text-rose-500 text-[10px] font-black uppercase tracking-widest hover:bg-rose-500/10 px-3 py-2 rounded-xl transition-all">Delete</button>
+
+              {/* Health Check URL */}
+              <div className="space-y-2 border-t border-dark-800 pt-4">
+                <div className="flex items-center gap-3">
+                  <svg className={`w-4 h-4 ${system.check_url ? 'text-brand' : 'text-zinc-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Health Check</span>
+                </div>
+                {system.check_url ? (
+                  <div className="bg-dark-900 rounded-xl px-4 py-3 border border-brand/10 space-y-1">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-brand">Active — Every {system.check_interval || 60}s</p>
+                    <p className="text-zinc-400 text-xs font-mono truncate">{system.check_url}</p>
+                    <button onClick={() => { setEditingCheckUrl(system.id); setCheckUrlForm({ check_url: system.check_url, check_interval: system.check_interval || 60 }); }} className="text-zinc-500 hover:text-zinc-300 text-[9px] font-black uppercase tracking-widest mt-1">Edit</button>
+                  </div>
+                ) : (
+                  <button onClick={() => { setEditingCheckUrl(system.id); setCheckUrlForm({ check_url: '', check_interval: 60 }); }} className="w-full bg-dark-900 border border-dashed border-dark-700 rounded-xl px-4 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-500 hover:border-brand/40 hover:text-brand transition-all">
+                    + Configure Health Check URL
+                  </button>
+                )}
+
+                {editingCheckUrl === system.id && (
+                  <div className="bg-dark-900 border border-dark-800 rounded-xl p-4 space-y-3">
+                    <div>
+                      <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">URL to Check</label>
+                      <input value={checkUrlForm.check_url} onChange={e => setCheckUrlForm({...checkUrlForm, check_url: e.target.value})} className="w-full bg-dark-950 border border-dark-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-1 focus:ring-brand font-mono" placeholder="https://example.com" />
+                    </div>
+                    <div>
+                      <label className="text-[9px] font-black text-zinc-500 uppercase tracking-widest block mb-1">Check Interval (seconds)</label>
+                      <input type="number" min={30} value={checkUrlForm.check_interval} onChange={e => setCheckUrlForm({...checkUrlForm, check_interval: Math.max(30, Number(e.target.value))})} className="w-full bg-dark-950 border border-dark-800 rounded-lg px-3 py-2 text-xs text-white outline-none focus:ring-1 focus:ring-brand font-mono" />
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={() => setEditingCheckUrl(null)} className="flex-1 py-2 text-[9px] font-black uppercase tracking-widest text-zinc-500 bg-dark-950 rounded-lg border border-dark-800">Cancel</button>
+                      <button onClick={() => handleSaveCheckUrl(system.id)} className="flex-1 py-2 text-[9px] font-black uppercase tracking-widest text-white bg-brand rounded-lg">Save</button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
         </div>

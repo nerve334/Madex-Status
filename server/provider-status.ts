@@ -7,6 +7,8 @@ interface PublicSystem {
   auto_status: number;
   provider_url: string;
   provider_component: string;
+  check_url: string;
+  check_interval: number;
 }
 
 interface StatuspageComponent {
@@ -20,6 +22,9 @@ interface StatuspageComponent {
 
 // Cache fetched statuspage responses to avoid hammering the same URL
 const responseCache = new Map<string, { data: StatuspageComponent[]; expires: number }>();
+
+// Track individual system check timers
+const systemTimers = new Map<number, NodeJS.Timeout>();
 
 // Map Atlassian Statuspage component statuses to our status values
 function mapProviderStatus(providerStatus: string): string {
@@ -77,22 +82,19 @@ function findBestMatch(components: StatuspageComponent[], searchTerm: string): S
 
   const lower = searchTerm.toLowerCase();
 
-  // Exact match first
   const exact = components.find(c => c.name.toLowerCase() === lower && !c.group);
   if (exact) return exact;
 
-  // Contains match
   const contains = components.find(c => c.name.toLowerCase().includes(lower) && !c.group);
   if (contains) return contains;
 
-  // Reverse contains (search term contains component name)
   const reverse = components.find(c => lower.includes(c.name.toLowerCase()) && !c.group);
   if (reverse) return reverse;
 
   return null;
 }
 
-async function syncSystem(system: PublicSystem): Promise<void> {
+async function syncProviderStatus(system: PublicSystem): Promise<void> {
   if (!system.provider_url || !system.provider_component) return;
 
   const components = await fetchComponents(system.provider_url);
@@ -111,54 +113,148 @@ async function syncSystem(system: PublicSystem): Promise<void> {
   }
 }
 
-let syncTimer: NodeJS.Timeout | null = null;
+// ──── Real HTTP Health Checks ────
 
-function recordAllHeartbeats(): void {
-  const allSystems = db.prepare('SELECT id, status FROM public_systems ORDER BY display_order ASC').all() as any[];
-  const insertStmt = db.prepare('INSERT INTO public_system_heartbeats (system_id, status) VALUES (?, ?)');
-  const pruneStmt = db.prepare(`DELETE FROM public_system_heartbeats WHERE system_id = ? AND id NOT IN (
-    SELECT id FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 100
-  )`);
+async function performHealthCheck(system: PublicSystem): Promise<{ status: string; responseTime: number; message: string }> {
+  if (!system.check_url) {
+    // No check URL configured — use current system status as a passive heartbeat
+    return {
+      status: system.status === 'operational' || system.status === 'degraded' ? 'up' : 'down',
+      responseTime: 0,
+      message: 'No check URL configured',
+    };
+  }
 
-  for (const s of allSystems) {
-    insertStmt.run(s.id, s.status);
-    pruneStmt.run(s.id, s.id);
+  const start = Date.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const res = await fetch(system.check_url, {
+      method: 'GET',
+      signal: controller.signal,
+      redirect: 'follow',
+      headers: { 'User-Agent': 'MadexStatus/1.0' },
+    });
+    clearTimeout(timeout);
+
+    const responseTime = Date.now() - start;
+
+    if (res.ok) {
+      return { status: 'up', responseTime, message: `HTTP ${res.status} - ${responseTime}ms` };
+    }
+    return { status: 'down', responseTime, message: `HTTP ${res.status}` };
+  } catch (err: any) {
+    const responseTime = Date.now() - start;
+    if (err.name === 'AbortError') {
+      return { status: 'down', responseTime, message: 'Timeout after 30s' };
+    }
+    return { status: 'down', responseTime, message: err.message || 'Connection failed' };
   }
 }
 
-async function runSync(): Promise<void> {
+function recordHeartbeat(systemId: number, status: string, responseTime: number, message: string): void {
+  db.prepare('INSERT INTO public_system_heartbeats (system_id, status, response_time, message) VALUES (?, ?, ?, ?)')
+    .run(systemId, status, responseTime, message);
+
+  // Prune old heartbeats (keep last 200 per system)
+  db.prepare(`DELETE FROM public_system_heartbeats WHERE system_id = ? AND id NOT IN (
+    SELECT id FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 200
+  )`).run(systemId, systemId);
+}
+
+async function checkSystem(system: PublicSystem): Promise<void> {
+  const result = await performHealthCheck(system);
+  recordHeartbeat(system.id, result.status, result.responseTime, result.message);
+
+  // Update system status based on real check (only if check_url is set)
+  if (system.check_url) {
+    const newStatus = result.status === 'up' ? 'operational' : 'major';
+    if (newStatus !== system.status) {
+      db.prepare('UPDATE public_systems SET status = ? WHERE id = ?').run(newStatus, system.id);
+      console.log(`[Health Check] ${system.name}: ${system.status} → ${newStatus} (${result.message})`);
+    }
+  }
+}
+
+function startSystemCheck(system: PublicSystem): void {
+  stopSystemCheck(system.id);
+
+  // Run first check immediately
+  checkSystem(system).catch(err => console.error(`[Health Check] Error checking ${system.name}:`, err));
+
+  const interval = Math.max(30, system.check_interval || 60) * 1000;
+  const timer = setInterval(() => {
+    // Re-read system from DB to get latest config
+    const current = db.prepare('SELECT * FROM public_systems WHERE id = ?').get(system.id) as PublicSystem | undefined;
+    if (!current) {
+      stopSystemCheck(system.id);
+      return;
+    }
+    checkSystem(current).catch(err => console.error(`[Health Check] Error checking ${current.name}:`, err));
+  }, interval);
+
+  systemTimers.set(system.id, timer);
+}
+
+function stopSystemCheck(systemId: number): void {
+  const timer = systemTimers.get(systemId);
+  if (timer) {
+    clearInterval(timer);
+    systemTimers.delete(systemId);
+  }
+}
+
+// ──── Provider Sync (runs every 2min for Atlassian Statuspage syncing) ────
+
+let providerSyncTimer: NodeJS.Timeout | null = null;
+
+async function runProviderSync(): Promise<void> {
   const systems = db.prepare(
     "SELECT * FROM public_systems WHERE auto_status = 1 AND provider_url != '' AND provider_component != ''"
   ).all() as PublicSystem[];
 
   if (systems.length > 0) {
-    // Clear response cache before each full sync cycle
     responseCache.clear();
-
     for (const system of systems) {
-      await syncSystem(system);
+      await syncProviderStatus(system);
     }
   }
-
-  // Always record heartbeats for ALL systems (even those without provider sync)
-  recordAllHeartbeats();
 }
 
-export function startProviderSync(intervalMs = 120_000): void {
-  // Run immediately on start
-  runSync().catch(err => console.error('[Provider Status] Sync error:', err));
+// ──── Start Everything ────
 
-  // Then repeat every interval (default: 2 minutes)
-  syncTimer = setInterval(() => {
-    runSync().catch(err => console.error('[Provider Status] Sync error:', err));
-  }, intervalMs);
+export function startProviderSync(intervalMs = 60_000): void {
+  // Start real health checks for ALL public systems
+  const allSystems = db.prepare('SELECT * FROM public_systems ORDER BY display_order ASC').all() as PublicSystem[];
+  for (const system of allSystems) {
+    startSystemCheck(system);
+  }
+  console.log(`[Health Check] Started checks for ${allSystems.length} systems`);
 
-  console.log(`[Provider Status] Syncing every ${intervalMs / 1000}s`);
+  // Start provider sync (every 2 minutes)
+  runProviderSync().catch(err => console.error('[Provider Status] Sync error:', err));
+  providerSyncTimer = setInterval(() => {
+    runProviderSync().catch(err => console.error('[Provider Status] Sync error:', err));
+  }, 120_000);
+
+  console.log(`[Provider Status] Syncing every 120s`);
 }
 
 export function stopProviderSync(): void {
-  if (syncTimer) {
-    clearInterval(syncTimer);
-    syncTimer = null;
+  if (providerSyncTimer) {
+    clearInterval(providerSyncTimer);
+    providerSyncTimer = null;
+  }
+  for (const [id] of systemTimers) {
+    stopSystemCheck(id);
+  }
+}
+
+// Restart checks for a specific system (call after updating check_url/check_interval)
+export function restartSystemCheck(systemId: number): void {
+  const system = db.prepare('SELECT * FROM public_systems WHERE id = ?').get(systemId) as PublicSystem | undefined;
+  if (system) {
+    startSystemCheck(system);
   }
 }

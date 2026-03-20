@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import db from '../database';
 import { hashPassword, verifyPassword, generateToken, authMiddleware, isSetupComplete } from '../auth';
 import { startMonitor, stopMonitor, restartMonitor } from '../monitor-engine';
+import { restartSystemCheck } from '../provider-status';
 import { testWebhook } from '../discord';
 
 const router = Router();
@@ -266,14 +267,16 @@ router.post('/public-systems', authMiddleware, (req: Request, res: Response) => 
 });
 
 router.put('/public-systems/:id', authMiddleware, (req: Request, res: Response) => {
-  const { name, status, display_order, auto_status, provider_url, provider_component } = req.body;
+  const { name, status, display_order, auto_status, provider_url, provider_component, check_url, check_interval } = req.body;
   db.prepare(`UPDATE public_systems SET 
     name=COALESCE(?,name), status=COALESCE(?,status), display_order=COALESCE(?,display_order),
-    auto_status=COALESCE(?,auto_status), provider_url=COALESCE(?,provider_url), provider_component=COALESCE(?,provider_component)
+    auto_status=COALESCE(?,auto_status), provider_url=COALESCE(?,provider_url), provider_component=COALESCE(?,provider_component),
+    check_url=COALESCE(?,check_url), check_interval=COALESCE(?,check_interval)
     WHERE id=?`)
-    .run(name, status, display_order, auto_status ?? null, provider_url ?? null, provider_component ?? null, req.params.id);
+    .run(name, status, display_order, auto_status ?? null, provider_url ?? null, provider_component ?? null, check_url ?? null, check_interval ?? null, req.params.id);
   const system = db.prepare('SELECT * FROM public_systems WHERE id = ?').get(req.params.id);
   if (!system) return res.status(404).json({ error: 'System not found' });
+  restartSystemCheck(Number(req.params.id));
   res.json(system);
 });
 
@@ -450,7 +453,7 @@ router.get('/public/status', (_req: Request, res: Response) => {
   // Attach heartbeat history to each system
   const systemsWithHeartbeats = systems.map((s: any) => {
     const heartbeats = db.prepare(
-      'SELECT status, timestamp FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 30'
+      'SELECT status, response_time, timestamp FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 45'
     ).all(s.id);
     return { ...s, heartbeats: heartbeats.reverse() };
   });

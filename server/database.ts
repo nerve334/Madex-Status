@@ -73,13 +73,17 @@ export function initDatabase() {
       auto_status INTEGER NOT NULL DEFAULT 0,
       provider_url TEXT DEFAULT '',
       provider_component TEXT DEFAULT '',
+      check_url TEXT DEFAULT '',
+      check_interval INTEGER NOT NULL DEFAULT 60,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
     CREATE TABLE IF NOT EXISTS public_system_heartbeats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       system_id INTEGER NOT NULL,
-      status TEXT NOT NULL DEFAULT 'operational',
+      status TEXT NOT NULL DEFAULT 'up',
+      response_time INTEGER DEFAULT 0,
+      message TEXT DEFAULT '',
       timestamp TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (system_id) REFERENCES public_systems(id) ON DELETE CASCADE
     );
@@ -139,6 +143,22 @@ export function initDatabase() {
     db.exec(`ALTER TABLE public_systems ADD COLUMN auto_status INTEGER NOT NULL DEFAULT 0`);
     db.exec(`ALTER TABLE public_systems ADD COLUMN provider_url TEXT DEFAULT ''`);
     db.exec(`ALTER TABLE public_systems ADD COLUMN provider_component TEXT DEFAULT ''`);
+  }
+
+  // Migrate: add check_url columns if missing
+  try {
+    db.prepare('SELECT check_url FROM public_systems LIMIT 1').get();
+  } catch {
+    db.exec(`ALTER TABLE public_systems ADD COLUMN check_url TEXT DEFAULT ''`);
+    db.exec(`ALTER TABLE public_systems ADD COLUMN check_interval INTEGER NOT NULL DEFAULT 60`);
+  }
+
+  // Migrate: add response_time to public_system_heartbeats if missing
+  try {
+    db.prepare('SELECT response_time FROM public_system_heartbeats LIMIT 1').get();
+  } catch {
+    db.exec(`ALTER TABLE public_system_heartbeats ADD COLUMN response_time INTEGER DEFAULT 0`);
+    db.exec(`ALTER TABLE public_system_heartbeats ADD COLUMN message TEXT DEFAULT ''`);
   }
 
   // Insert default public systems if table is empty
