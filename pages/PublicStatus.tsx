@@ -126,59 +126,31 @@ const PublicStatus: React.FC = () => {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {systems.map((system: any) => {
                 const hbs = system.heartbeats || [];
-                const firstTime = hbs.length > 0 ? formatTime(hbs[0].timestamp) : '';
-                const lastTime = hbs.length > 0 ? formatTime(hbs[hbs.length - 1].timestamp) : '';
-                const latestRT = hbs.length > 0 ? hbs[hbs.length - 1].response_time : 0;
                 return (
                 <div key={system.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-2xl pointer-events-auto">
-                  <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center justify-between mb-4">
                     <h3 className="font-black text-2xl text-zinc-100 tracking-tight">{system.name}</h3>
-                    <span className={`px-3 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
-                      system.status === 'operational' 
-                        ? 'bg-brand text-white' 
-                        : system.status === 'degraded' ? 'bg-yellow-400 text-dark-950'
-                        : 'bg-rose-500 text-white'
-                    }`}>
-                      {system.status === 'operational' ? 'Up' : system.status === 'degraded' ? 'Degraded' : 'Down'}
-                    </span>
+                    <div className={`w-3 h-3 rounded-full ${getStatusDot(system.status)} animate-pulse`}></div>
                   </div>
 
-                  {/* Uptime Kuma-style heartbeat bar */}
-                  <div className="mt-5">
+                  {/* Heartbeat bar */}
+                  <div className="flex items-end gap-[2px] h-[24px]">
                     {(() => {
-                      const maxBars = 45;
+                      const maxBars = 20;
                       const padded = [
                         ...Array.from({ length: Math.max(0, maxBars - hbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
                         ...hbs,
                       ].slice(-maxBars);
-                      return (
-                        <>
-                          <div className="flex items-center gap-2 mb-1">
-                            {firstTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{firstTime}</span>}
-                            <div className="flex items-end gap-[1px] h-[26px] flex-1">
-                              {padded.map((hb: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
-                                    hb.status === 'empty' ? 'bg-zinc-800/60' : getHeartbeatColor(hb.status)
-                                  }`}
-                                  style={{ height: '100%' }}
-                                  title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : hb.status === 'down' ? 'Down' : hb.status}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
-                                />
-                              ))}
-                            </div>
-                            {lastTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{lastTime}</span>}
-                          </div>
-                          <div className="flex items-center justify-between mt-2">
-                            <span className="text-[10px] text-zinc-600 font-mono">
-                              Check every {system.check_interval || 60}s
-                            </span>
-                            {latestRT > 0 && (
-                              <span className="text-[10px] text-zinc-500 font-mono">{latestRT}ms</span>
-                            )}
-                          </div>
-                        </>
-                      );
+                      return padded.map((hb: any, i: number) => (
+                        <div
+                          key={i}
+                          className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
+                            hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)
+                          }`}
+                          style={{ height: '100%' }}
+                          title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : hb.status === 'down' ? 'Down' : hb.status}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                        />
+                      ));
                     })()}
                   </div>
                 </div>
@@ -238,8 +210,6 @@ const PublicStatus: React.FC = () => {
             <div className="space-y-6">
               {monitors.map((monitor: any) => {
                 const mhbs = monitor.heartbeats || [];
-                const mFirstTime = mhbs.length > 0 ? formatTime(mhbs[0].timestamp) : '';
-                const mLastTime = mhbs.length > 0 ? formatTime(mhbs[mhbs.length - 1].timestamp) : '';
                 return (
                 <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
                   <div className="flex flex-col gap-5">
@@ -258,40 +228,26 @@ const PublicStatus: React.FC = () => {
                           </div>
                         </div>
                       </div>
-                      <span className={`px-4 py-2 rounded-full text-sm font-black uppercase tracking-wider ${
-                        monitor.status === 'up' 
-                          ? 'bg-brand text-white' 
-                          : 'bg-rose-500 text-white'
-                      }`}>
-                        {monitor.status === 'up' ? 'Up' : 'Down'}
-                      </span>
+                      <div className={`w-3.5 h-3.5 rounded-full ${monitor.status === 'up' ? 'bg-brand' : 'bg-rose-500'} animate-pulse`}></div>
                     </div>
-                    {/* Uptime Kuma-style heartbeat bar */}
-                    <div>
+                    {/* Heartbeat bar */}
+                    <div className="flex items-end gap-[2px] h-[24px]">
                       {(() => {
-                        const maxBars = 30;
+                        const maxBars = 20;
                         const padded = [
                           ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
                           ...mhbs,
                         ].slice(-maxBars);
-                        return (
-                          <div className="flex items-center gap-2">
-                            {mFirstTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mFirstTime}</span>}
-                            <div className="flex items-end gap-[1px] h-[26px] flex-1">
-                              {padded.map((hb: any, i: number) => (
-                                <div
-                                  key={i}
-                                  className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
-                                    hb.status === 'empty' ? 'bg-zinc-800/60' : getHeartbeatColor(hb.status)
-                                  }`}
-                                  style={{ height: '100%' }}
-                                  title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
-                                />
-                              ))}
-                            </div>
-                            {mLastTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mLastTime}</span>}
-                          </div>
-                        );
+                        return padded.map((hb: any, i: number) => (
+                          <div
+                            key={i}
+                            className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
+                              hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)
+                            }`}
+                            style={{ height: '100%' }}
+                            title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                          />
+                        ));
                       })()}
                     </div>
                   </div>
