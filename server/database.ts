@@ -165,10 +165,10 @@ export function initDatabase() {
   const count = db.prepare('SELECT COUNT(*) as count FROM public_systems').get() as any;
   if (count.count === 0) {
     const insertSystem = db.prepare('INSERT INTO public_systems (name, status, display_order, auto_status, provider_url, provider_component) VALUES (?, ?, ?, ?, ?, ?)');
-    insertSystem.run('Domain', 'operational', 1, 1, 'https://status.godaddy.com/api/v2/components.json', 'Domains');
-    insertSystem.run('Hosting', 'operational', 2, 1, 'https://www.hostingerstatus.com/api/v2/components.json', 'Web Hosting');
-    insertSystem.run('Server', 'operational', 3, 1, 'https://www.hostingerstatus.com/api/v2/components.json', 'VPS');
-    insertSystem.run('E-Mail', 'operational', 4, 1, 'https://www.hostingerstatus.com/api/v2/components.json', 'Email');
+    insertSystem.run('Domain Registration', 'operational', 1, 1, 'https://status.godaddy.com/api/v2/components.json', 'Domain Registration');
+    insertSystem.run('Web Hosting', 'operational', 2, 1, 'https://statuspage.hostinger.com/api/v2/components.json', 'Client Portal');
+    insertSystem.run('VPS Servers', 'operational', 3, 1, 'https://statuspage.hostinger.com/api/v2/components.json', 'Hostinger VPS API');
+    insertSystem.run('Email Services', 'operational', 4, 1, 'https://statuspage.hostinger.com/api/v2/components.json', 'Hostinger Mail');
   }
 }
 

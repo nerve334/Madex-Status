@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import db from '../database';
 import { hashPassword, verifyPassword, generateToken, authMiddleware, isSetupComplete } from '../auth';
 import { startMonitor, stopMonitor, restartMonitor } from '../monitor-engine';
-import { restartSystemCheck } from '../provider-status';
+import { restartSystemCheck, getProviderIncidents } from '../provider-status';
 import { testWebhook } from '../discord';
 
 const router = Router();
@@ -495,6 +495,7 @@ router.get('/public/status', (_req: Request, res: Response) => {
   res.json({
     systems: systemsWithHeartbeats,
     incidents,
+    providerIncidents: getProviderIncidents(),
     monitors: monitorPublicData,
     settings: {
       brand_name: settingsMap.brand_name || 'Madex Status',

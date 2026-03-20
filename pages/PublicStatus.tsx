@@ -64,11 +64,13 @@ const PublicStatus: React.FC = () => {
 
   if (!data) return null;
 
-  const { systems, incidents, monitors, settings } = data;
+  const { systems, incidents, providerIncidents, monitors, settings } = data;
   const brandName = settings.brand_name || 'Madex Status';
   const activeIncidents = incidents.filter((i: any) => i.status === 'active');
   const resolvedIncidents = incidents.filter((i: any) => i.status === 'resolved');
-  const allSystemsOk = systems.every((s: any) => s.status === 'operational') && activeIncidents.length === 0;
+  const allProviderIncidents = providerIncidents || [];
+  const hasActiveIssues = activeIncidents.length > 0 || allProviderIncidents.length > 0;
+  const allSystemsOk = systems.every((s: any) => s.status === 'operational') && !hasActiveIssues;
 
   return (
     <div className="min-h-screen bg-dark-950 px-4 md:px-12 py-8 md:py-16 selection:bg-brand selection:text-white relative overflow-hidden">
@@ -92,7 +94,7 @@ const PublicStatus: React.FC = () => {
             )}
           </div>
           <div className="pointer-events-auto">
-            <h1 className="text-4xl md:text-6xl font-black tracking-tighter text-white uppercase flex flex-col md:flex-row items-center justify-center gap-x-4 w-full text-center">
+            <h1 className="text-3xl md:text-6xl font-black tracking-tighter text-white uppercase flex flex-row items-center justify-center gap-x-3 md:gap-x-4 w-full text-center whitespace-nowrap">
               <span>{brandName.split(' ')[0]}</span>
               <span className="text-brand">{brandName.split(' ').slice(1).join(' ') || 'Status'}</span>
             </h1>
@@ -143,38 +145,41 @@ const PublicStatus: React.FC = () => {
 
                   {/* Uptime Kuma-style heartbeat bar */}
                   <div className="mt-5">
-                    {hbs.length > 0 ? (
-                      <>
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{firstTime}</span>
-                          <div className="flex items-end gap-[2px] h-[28px] flex-1">
-                            {hbs.map((hb: any, i: number) => (
-                              <div
-                                key={i}
-                                className={`flex-1 rounded-[3px] cursor-default transition-all duration-150 ${getHeartbeatColor(hb.status)}`}
-                                style={{ height: '100%' }}
-                                title={`${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : hb.status === 'down' ? 'Down' : hb.status}${hb.response_time ? ` (${hb.response_time}ms)` : ''}`}
-                              />
-                            ))}
+                    {(() => {
+                      const maxBars = 45;
+                      const padded = [
+                        ...Array.from({ length: Math.max(0, maxBars - hbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
+                        ...hbs,
+                      ].slice(-maxBars);
+                      return (
+                        <>
+                          <div className="flex items-center gap-2 mb-1">
+                            {firstTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{firstTime}</span>}
+                            <div className="flex items-end gap-[1px] h-[26px] flex-1">
+                              {padded.map((hb: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
+                                    hb.status === 'empty' ? 'bg-zinc-800/60' : getHeartbeatColor(hb.status)
+                                  }`}
+                                  style={{ height: '100%' }}
+                                  title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : hb.status === 'down' ? 'Down' : hb.status}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                                />
+                              ))}
+                            </div>
+                            {lastTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{lastTime}</span>}
                           </div>
-                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{lastTime}</span>
-                        </div>
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-[10px] text-zinc-600 font-mono">
-                            Check every {system.check_interval || 60}s
-                          </span>
-                          {latestRT > 0 && (
-                            <span className="text-[10px] text-zinc-500 font-mono">{latestRT}ms</span>
-                          )}
-                        </div>
-                      </>
-                    ) : (
-                      <div className="flex items-end gap-[2px] h-[28px]">
-                        {Array.from({ length: 30 }).map((_, i) => (
-                          <div key={i} className="flex-1 h-full rounded-[3px] bg-zinc-800" />
-                        ))}
-                      </div>
-                    )}
+                          <div className="flex items-center justify-between mt-2">
+                            <span className="text-[10px] text-zinc-600 font-mono">
+                              Check every {system.check_interval || 60}s
+                            </span>
+                            {latestRT > 0 && (
+                              <span className="text-[10px] text-zinc-500 font-mono">{latestRT}ms</span>
+                            )}
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 );
@@ -183,8 +188,8 @@ const PublicStatus: React.FC = () => {
           </section>
         )}
 
-        {/* Active Incidents */}
-        {activeIncidents.length > 0 && (
+        {/* Active Incidents (manual + provider) */}
+        {(activeIncidents.length > 0 || allProviderIncidents.length > 0) && (
           <section className="space-y-10 pointer-events-none">
             <div className="flex items-center gap-4">
               <h2 className="text-xs font-black uppercase tracking-[0.4em] text-rose-400 flex items-center gap-3"><Activity className="w-4 h-4 text-rose-400" /> Active Incidents</h2>
@@ -202,6 +207,20 @@ const PublicStatus: React.FC = () => {
                   <div className="flex items-center gap-4 text-[10px] text-zinc-600 font-mono">
                     <span>{new Date(incident.created_at).toLocaleString()}</span>
                     {incident.system_name && <span className="text-brand">• {incident.system_name}</span>}
+                  </div>
+                </div>
+              ))}
+              {allProviderIncidents.map((inc: any) => (
+                <div key={inc.id} className="bg-amber-500/5 border border-amber-500/20 rounded-[32px] p-6 md:p-8 pointer-events-auto">
+                  <div className="flex flex-wrap items-center gap-3 mb-4">
+                    <span className="text-amber-400 text-[9px] font-black uppercase tracking-widest animate-pulse px-3 py-1 rounded-lg border border-amber-400/20">{inc.status}</span>
+                    <span className="text-zinc-500 text-[9px] font-black uppercase tracking-widest px-3 py-1 rounded-lg border border-zinc-700">{inc.provider}</span>
+                    {inc.components && <span className="text-zinc-400 text-[9px] font-mono">{inc.components}</span>}
+                  </div>
+                  <h4 className="text-lg md:text-xl font-black tracking-tight text-zinc-100 mb-2">{inc.title}</h4>
+                  {inc.description && <p className="text-sm text-zinc-400 leading-relaxed mb-4">{inc.description}</p>}
+                  <div className="flex items-center gap-4 text-[10px] text-zinc-600 font-mono">
+                    <span>{new Date(inc.created_at).toLocaleString()}</span>
                   </div>
                 </div>
               ))}
@@ -249,28 +268,31 @@ const PublicStatus: React.FC = () => {
                     </div>
                     {/* Uptime Kuma-style heartbeat bar */}
                     <div>
-                      {mhbs.length > 0 ? (
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mFirstTime}</span>
-                          <div className="flex items-end gap-[2px] h-[28px] flex-1">
-                            {mhbs.map((hb: any, i: number) => (
-                              <div
-                                key={i}
-                                className={`flex-1 rounded-[3px] cursor-default transition-all duration-150 ${getHeartbeatColor(hb.status)}`}
-                                style={{ height: '100%' }}
-                                title={`${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}`}
-                              />
-                            ))}
+                      {(() => {
+                        const maxBars = 30;
+                        const padded = [
+                          ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
+                          ...mhbs,
+                        ].slice(-maxBars);
+                        return (
+                          <div className="flex items-center gap-2">
+                            {mFirstTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mFirstTime}</span>}
+                            <div className="flex items-end gap-[1px] h-[26px] flex-1">
+                              {padded.map((hb: any, i: number) => (
+                                <div
+                                  key={i}
+                                  className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
+                                    hb.status === 'empty' ? 'bg-zinc-800/60' : getHeartbeatColor(hb.status)
+                                  }`}
+                                  style={{ height: '100%' }}
+                                  title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                                />
+                              ))}
+                            </div>
+                            {mLastTime && <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mLastTime}</span>}
                           </div>
-                          <span className="text-[10px] text-zinc-500 font-mono shrink-0">{mLastTime}</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-end gap-[2px] h-[28px]">
-                          {Array.from({ length: 30 }).map((_, i) => (
-                            <div key={i} className="flex-1 h-full rounded-[3px] bg-zinc-800" />
-                          ))}
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
@@ -309,7 +331,7 @@ const PublicStatus: React.FC = () => {
         )}
 
         {/* No Incidents at all */}
-        {incidents.length === 0 && (
+        {incidents.length === 0 && allProviderIncidents.length === 0 && (
           <section className="pointer-events-none">
             <div className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[48px] p-16 text-center pointer-events-auto">
               <CheckCircle className="w-16 h-16 text-zinc-800 mx-auto mb-6" />
@@ -323,9 +345,9 @@ const PublicStatus: React.FC = () => {
           <div className="flex flex-col items-center gap-10">
             <div className="flex items-center gap-5 grayscale hover:grayscale-0 transition-all duration-700 cursor-default group pointer-events-auto">
               {settings.icon ? <img src={settings.icon} className="w-10 h-10 object-contain" alt="Icon" /> : <Activity className="w-10 h-10 text-brand" />}
-              <span className="font-black text-2xl uppercase tracking-[0.4em] text-zinc-400 group-hover:text-brand transition-colors">{brandName}</span>
+              <span className="font-black text-xl md:text-2xl uppercase tracking-[0.2em] md:tracking-[0.4em] text-zinc-400 group-hover:text-brand transition-colors whitespace-nowrap">{brandName}</span>
             </div>
-            <p className="text-xs text-zinc-600 font-bold tracking-[0.2em] uppercase pointer-events-auto">&copy; 2026 {brandName} &bull; All Rights Reserved</p>
+            <p className="text-[10px] md:text-xs text-zinc-600 font-bold tracking-[0.15em] md:tracking-[0.2em] uppercase pointer-events-auto whitespace-nowrap">&copy; 2026 {brandName} &bull; All Rights Reserved</p>
           </div>
         </footer>
       </div>

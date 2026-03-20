@@ -20,11 +20,36 @@ interface StatuspageComponent {
   group_id: string | null;
 }
 
+interface StatuspageIncident {
+  id: string;
+  name: string;
+  status: string;
+  impact: string;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  shortlink: string;
+  incident_updates: Array<{
+    id: string;
+    status: string;
+    body: string;
+    created_at: string;
+  }>;
+  components: Array<{ name: string; status: string }>;
+}
+
 // Cache fetched statuspage responses to avoid hammering the same URL
-const responseCache = new Map<string, { data: StatuspageComponent[]; expires: number }>();
+const responseCache = new Map<string, { data: any; expires: number }>();
 
 // Track individual system check timers
 const systemTimers = new Map<number, NodeJS.Timeout>();
+
+// Store cached provider incidents (fetched from APIs, shown on public page)
+let cachedProviderIncidents: any[] = [];
+
+export function getProviderIncidents(): any[] {
+  return cachedProviderIncidents;
+}
 
 // Map Atlassian Statuspage component statuses to our status values
 function mapProviderStatus(providerStatus: string): string {
@@ -45,8 +70,8 @@ function mapProviderStatus(providerStatus: string): string {
 }
 
 async function fetchComponents(url: string): Promise<StatuspageComponent[]> {
-  // Check cache (valid for 60 seconds)
-  const cached = responseCache.get(url);
+  const cacheKey = 'components:' + url;
+  const cached = responseCache.get(cacheKey);
   if (cached && cached.expires > Date.now()) {
     return cached.data;
   }
@@ -69,10 +94,42 @@ async function fetchComponents(url: string): Promise<StatuspageComponent[]> {
     const data = await res.json() as { components?: StatuspageComponent[] };
     const components = data.components || [];
 
-    responseCache.set(url, { data: components, expires: Date.now() + 60_000 });
+    responseCache.set(cacheKey, { data: components, expires: Date.now() + 60_000 });
     return components;
   } catch (err: any) {
     console.error(`[Provider Status] Error fetching ${url}: ${err.message}`);
+    return [];
+  }
+}
+
+async function fetchUnresolvedIncidents(baseUrl: string): Promise<StatuspageIncident[]> {
+  // Convert components.json URL to incidents URL
+  const incidentsUrl = baseUrl.replace('/api/v2/components.json', '/api/v2/incidents/unresolved.json');
+  const cacheKey = 'incidents:' + incidentsUrl;
+  const cached = responseCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) {
+    return cached.data;
+  }
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+
+    const res = await fetch(incidentsUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'application/json', 'User-Agent': 'MadexStatus/1.0' },
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+
+    const data = await res.json() as { incidents?: StatuspageIncident[] };
+    const incidents = data.incidents || [];
+
+    responseCache.set(cacheKey, { data: incidents, expires: Date.now() + 60_000 });
+    return incidents;
+  } catch (err: any) {
+    console.error(`[Provider Incidents] Error fetching ${incidentsUrl}: ${err.message}`);
     return [];
   }
 }
@@ -219,6 +276,43 @@ async function runProviderSync(): Promise<void> {
     for (const system of systems) {
       await syncProviderStatus(system);
     }
+  }
+
+  // Fetch unresolved incidents from all unique provider URLs
+  const providerUrls = new Set<string>();
+  const allSystems = db.prepare("SELECT provider_url FROM public_systems WHERE provider_url != ''").all() as any[];
+  for (const s of allSystems) {
+    if (s.provider_url) providerUrls.add(s.provider_url);
+  }
+
+  const allIncidents: any[] = [];
+  const seenIds = new Set<string>();
+
+  for (const url of providerUrls) {
+    const incidents = await fetchUnresolvedIncidents(url);
+    // Determine provider name from URL
+    const providerName = url.includes('godaddy') ? 'GoDaddy' : url.includes('hostinger') ? 'Hostinger' : 'Provider';
+    for (const inc of incidents) {
+      if (seenIds.has(inc.id)) continue;
+      seenIds.add(inc.id);
+      const latestUpdate = inc.incident_updates?.[0];
+      allIncidents.push({
+        id: inc.id,
+        provider: providerName,
+        title: inc.name,
+        status: inc.status,
+        impact: inc.impact,
+        description: latestUpdate?.body || '',
+        created_at: inc.created_at,
+        updated_at: inc.updated_at,
+        components: inc.components?.map(c => c.name).join(', ') || '',
+      });
+    }
+  }
+
+  cachedProviderIncidents = allIncidents;
+  if (allIncidents.length > 0) {
+    console.log(`[Provider Incidents] ${allIncidents.length} active incident(s) from providers`);
   }
 }
 
