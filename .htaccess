@@ -1,0 +1,18 @@
+
+RewriteEngine On
+
+# 1. Map /madexadm to madexadm.html
+RewriteRule ^madexadm$ madexadm.html [L]
+
+# 2. Map /admindashboard to admindashboard.html
+RewriteRule ^admindashboard$ admindashboard.html [L]
+
+# 3. Remove .html extension from URLs
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME}\.html -f
+RewriteRule ^(.*)$ $1.html [NC,L]
+
+# 4. SPA Fallback: If file doesn't exist, serve index.html (for other routes)
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . index.html [L]

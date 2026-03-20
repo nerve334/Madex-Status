@@ -1,0 +1,5 @@
+{
+  "name": "Madex Status Dashboard",
+  "description": "A professional system monitoring and public status dashboard for Madex IT, featuring dark mode, site management, and Discord integration.",
+  "requestFramePermissions": []
+}
