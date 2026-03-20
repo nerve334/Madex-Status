@@ -142,7 +142,7 @@ const PublicStatus: React.FC = () => {
                   </div>
 
                   {/* Heartbeat bar */}
-                  <div className="grid h-[24px]" style={{ gridTemplateColumns: 'repeat(20, 1fr)', gap: '3px' }}>
+                  <div className="grid grid-cols-[repeat(20,1fr)] gap-[3px] h-6">
                     {(() => {
                       const maxBars = 20;
                       const padded = [
@@ -279,7 +279,7 @@ const PublicStatus: React.FC = () => {
                       <div className={`w-3.5 h-3.5 rounded-full ${isUp ? 'bg-brand' : 'bg-rose-500'} animate-pulse`}></div>
                     </div>
                     {/* Heartbeat bar */}
-                    <div className="grid h-[24px]" style={{ gridTemplateColumns: 'repeat(20, 1fr)', gap: '3px' }}>
+                    <div className="grid grid-cols-[repeat(20,1fr)] gap-[3px] h-6">
                       {(() => {
                         const maxBars = 20;
                         const padded = [

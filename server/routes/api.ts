@@ -67,8 +67,13 @@ router.get('/auth/me', authMiddleware, (req: Request, res: Response) => {
 
 // List all monitors
 router.get('/monitors', authMiddleware, (_req: Request, res: Response) => {
-  const monitors = db.prepare('SELECT * FROM monitors ORDER BY created_at DESC').all();
-  res.json(monitors);
+  const monitors = db.prepare('SELECT * FROM monitors ORDER BY created_at DESC').all() as any[];
+  // Derive real status from latest heartbeat
+  const enriched = monitors.map((m: any) => {
+    const latest = db.prepare('SELECT status FROM heartbeats WHERE monitor_id = ? ORDER BY timestamp DESC LIMIT 1').get(m.id) as any;
+    return { ...m, status: latest ? latest.status : m.status };
+  });
+  res.json(enriched);
 });
 
 // Export monitors as JSON
@@ -481,7 +486,7 @@ router.get('/public/status', (_req: Request, res: Response) => {
     return {
       id: m.id,
       name: m.name,
-      status: m.status,
+      status: heartbeats.length > 0 ? heartbeats[0].status : m.status,
       uptime: Number(uptime),
       responseTime: latestRT,
       heartbeats: heartbeats.slice(0, 30).reverse(),
@@ -510,10 +515,15 @@ router.get('/public/status', (_req: Request, res: Response) => {
 
 router.get('/dashboard/stats', authMiddleware, (_req: Request, res: Response) => {
   const monitors = db.prepare('SELECT * FROM monitors').all() as any[];
-  const totalMonitors = monitors.length;
-  const upMonitors = monitors.filter((m: any) => m.status === 'up').length;
-  const downMonitors = monitors.filter((m: any) => m.status === 'down').length;
-  const pendingMonitors = monitors.filter((m: any) => m.status === 'pending').length;
+  // Derive real status from latest heartbeat
+  const enriched = monitors.map((m: any) => {
+    const latest = db.prepare('SELECT status FROM heartbeats WHERE monitor_id = ? ORDER BY timestamp DESC LIMIT 1').get(m.id) as any;
+    return { ...m, status: latest ? latest.status : m.status };
+  });
+  const totalMonitors = enriched.length;
+  const upMonitors = enriched.filter((m: any) => m.status === 'up').length;
+  const downMonitors = enriched.filter((m: any) => m.status === 'down').length;
+  const pendingMonitors = enriched.filter((m: any) => m.status === 'pending').length;
 
   const activeIncidents = db.prepare('SELECT COUNT(*) as count FROM incidents WHERE status = "active"').get() as any;
 
