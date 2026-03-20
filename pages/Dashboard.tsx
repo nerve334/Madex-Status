@@ -12,10 +12,10 @@ const Dashboard: React.FC = () => {
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, m, inc] = await Promise.all([getDashboardStats(), getMonitors(), getIncidents()]);
-      setStats(s);
-      setMonitors(m);
-      setIncidents(inc);
+      const [s, m, inc] = await Promise.allSettled([getDashboardStats(), getMonitors(), getIncidents()]);
+      if (s.status === 'fulfilled') setStats(s.value);
+      if (m.status === 'fulfilled') setMonitors(m.value);
+      if (inc.status === 'fulfilled') setIncidents(inc.value);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
     } finally {
@@ -58,9 +58,9 @@ const Dashboard: React.FC = () => {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatCard title="Total Monitors" value={stats?.totalMonitors || 0} icon={<Globe className="w-6 h-6 text-brand" />} color="brand" />
-        <StatCard title="Operational" value={stats?.upMonitors || 0} icon={<CheckCircle className="w-6 h-6 text-brand" />} color="brand" />
-        <StatCard title="Down" value={stats?.downMonitors || 0} icon={<XCircle className="w-6 h-6 text-rose-500" />} color="rose" />
+        <StatCard title="Total Monitors" value={stats?.totalMonitors ?? monitors.length} icon={<Globe className="w-6 h-6 text-brand" />} color="brand" />
+        <StatCard title="Operational" value={stats?.upMonitors ?? monitors.filter(m => m.status === 'up').length} icon={<CheckCircle className="w-6 h-6 text-brand" />} color="brand" />
+        <StatCard title="Down" value={stats?.downMonitors ?? monitors.filter(m => m.status === 'down').length} icon={<XCircle className="w-6 h-6 text-rose-500" />} color="rose" />
         <StatCard title="Avg Response" value={`${stats?.avgResponseTime || 0}ms`} icon={<Activity className="w-6 h-6 text-amber-500" />} color="amber" />
       </div>
 
