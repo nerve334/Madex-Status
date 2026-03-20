@@ -160,6 +160,64 @@ const PublicStatus: React.FC = () => {
           </section>
         )}
 
+        {/* Monitored Websites */}
+        {monitors.length > 0 && (
+          <section className="space-y-10 pointer-events-none">
+            <div className="flex items-center gap-4">
+              <h2 className="text-xs font-black uppercase tracking-[0.4em] text-zinc-600 flex items-center gap-3"><Globe className="w-4 h-4 text-brand" /> Monitored Services</h2>
+              <div className="h-px bg-dark-800 flex-1"></div>
+            </div>
+            <div className="space-y-6">
+              {monitors.map((monitor: any) => {
+                const mhbs = monitor.heartbeats || [];
+                return (
+                <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
+                  <div className="flex flex-col gap-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-5">
+                        <div className={`p-3 rounded-2xl border border-white/5 ${monitor.status === 'up' ? 'bg-brand/10 text-brand' : monitor.status === 'pending' ? 'bg-zinc-500/10 text-zinc-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                          <Globe className="w-6 h-6" />
+                        </div>
+                        <div>
+                          <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
+                          <div className="flex items-center gap-4 mt-1">
+                            {monitor.responseTime > 0 && (
+                              <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
+                            )}
+                            <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div className={`w-3.5 h-3.5 rounded-full ${monitor.status === 'up' ? 'bg-brand' : monitor.status === 'pending' ? 'bg-zinc-500' : 'bg-rose-500'} animate-pulse`}></div>
+                    </div>
+                    {/* Heartbeat bar */}
+                    <div className="flex items-end gap-[2px] h-[24px]">
+                      {(() => {
+                        const maxBars = 20;
+                        const padded = [
+                          ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
+                          ...mhbs,
+                        ].slice(-maxBars);
+                        return padded.map((hb: any, i: number) => (
+                          <div
+                            key={i}
+                            className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
+                              hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)
+                            }`}
+                            style={{ height: '100%' }}
+                            title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                          />
+                        ));
+                      })()}
+                    </div>
+                  </div>
+                </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
         {/* Active Incidents (manual + provider) */}
         {(activeIncidents.length > 0 || allProviderIncidents.length > 0) && (
           <section className="space-y-10 pointer-events-none">
@@ -196,64 +254,6 @@ const PublicStatus: React.FC = () => {
                   </div>
                 </div>
               ))}
-            </div>
-          </section>
-        )}
-
-        {/* Monitored Websites */}
-        {monitors.length > 0 && (
-          <section className="space-y-10 pointer-events-none">
-            <div className="flex items-center gap-4">
-              <h2 className="text-xs font-black uppercase tracking-[0.4em] text-zinc-600 flex items-center gap-3"><Globe className="w-4 h-4 text-brand" /> Monitored Services</h2>
-              <div className="h-px bg-dark-800 flex-1"></div>
-            </div>
-            <div className="space-y-6">
-              {monitors.map((monitor: any) => {
-                const mhbs = monitor.heartbeats || [];
-                return (
-                <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
-                  <div className="flex flex-col gap-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-5">
-                        <div className={`p-3 rounded-2xl border border-white/5 ${monitor.status === 'up' ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
-                          <Globe className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
-                          <div className="flex items-center gap-4 mt-1">
-                            {monitor.responseTime > 0 && (
-                              <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
-                            )}
-                            <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className={`w-3.5 h-3.5 rounded-full ${monitor.status === 'up' ? 'bg-brand' : 'bg-rose-500'} animate-pulse`}></div>
-                    </div>
-                    {/* Heartbeat bar */}
-                    <div className="flex items-end gap-[2px] h-[24px]">
-                      {(() => {
-                        const maxBars = 20;
-                        const padded = [
-                          ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
-                          ...mhbs,
-                        ].slice(-maxBars);
-                        return padded.map((hb: any, i: number) => (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-[2px] cursor-default transition-all duration-150 ${
-                              hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)
-                            }`}
-                            style={{ height: '100%' }}
-                            title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
-                          />
-                        ));
-                      })()}
-                    </div>
-                  </div>
-                </div>
-                );
-              })}
             </div>
           </section>
         )}

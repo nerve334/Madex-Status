@@ -1,20 +1,21 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getDashboardStats, getMonitors } from '../api';
+import { getDashboardStats, getMonitors, getIncidents } from '../api';
 import { CheckCircle, AlertTriangle, XCircle, Globe, Activity } from '../components/Icons';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<any>(null);
   const [monitors, setMonitors] = useState<any[]>([]);
+  const [incidents, setIncidents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
     try {
-      const [s, m] = await Promise.all([getDashboardStats(), getMonitors()]);
+      const [s, m, inc] = await Promise.all([getDashboardStats(), getMonitors(), getIncidents()]);
       setStats(s);
       setMonitors(m);
+      setIncidents(inc);
     } catch (err) {
       console.error('Failed to fetch dashboard data:', err);
     } finally {
@@ -36,15 +37,8 @@ const Dashboard: React.FC = () => {
     );
   }
 
-  const chartData = (stats?.recentHeartbeats || [])
-    .filter((h: any) => h.status === 'up')
-    .slice(0, 50)
-    .reverse()
-    .map((h: any, idx: number) => ({
-      time: idx,
-      latency: h.response_time,
-      name: h.monitor_name,
-    }));
+  const activeIncidents = incidents.filter((i: any) => i.status === 'active');
+  const resolvedIncidents = incidents.filter((i: any) => i.status === 'resolved');
 
   return (
     <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -70,91 +64,132 @@ const Dashboard: React.FC = () => {
         <StatCard title="Avg Response" value={`${stats?.avgResponseTime || 0}ms`} icon={<Activity className="w-6 h-6 text-amber-500" />} color="amber" />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Monitor List */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="bg-dark-900 border border-dark-800 rounded-3xl p-8 shadow-2xl">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h3 className="text-2xl font-black tracking-tight">Monitors</h3>
-                <p className="text-sm text-zinc-500 mt-1">{monitors.length} monitors configured</p>
-              </div>
-              <button onClick={() => navigate('/sites')} className="text-xs font-bold text-brand hover:underline">View All →</button>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[600px] overflow-y-auto custom-scrollbar pr-2">
-              {monitors.length === 0 ? (
-                <div className="col-span-2 py-16 text-center">
-                  <Globe className="w-12 h-12 text-zinc-700 mx-auto mb-4" />
-                  <p className="text-zinc-500 font-bold">No monitors configured yet</p>
-                  <button onClick={() => navigate('/sites')} className="mt-4 px-6 py-3 bg-brand text-white rounded-xl text-xs font-black uppercase tracking-widest">Add Your First Monitor</button>
-                </div>
-              ) : (
-                monitors.map((monitor: any) => (
-                  <button key={monitor.id} onClick={() => navigate(`/sites/${monitor.id}`)} className="flex items-center justify-between p-5 rounded-2xl bg-dark-950 border border-dark-800 hover:border-brand/40 transition-all group shadow-sm text-left w-full">
-                    <div className="min-w-0 flex-1 mr-4">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className={`w-2 h-2 rounded-full ${monitor.status === 'up' ? 'bg-brand shadow-[0_0_8px_rgba(2,141,134,0.4)]' : monitor.status === 'pending' ? 'bg-zinc-500' : 'bg-rose-500 shadow-[0_0_8px_rgba(225,29,72,0.4)]'}`}></span>
-                        <p className="text-base font-bold truncate group-hover:text-brand transition-colors">{monitor.name}</p>
-                      </div>
-                      <p className="text-xs text-zinc-500 truncate font-mono">{monitor.url}</p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1.5">
-                      <div className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${monitor.status === 'up' ? 'bg-brand/10 text-brand' : monitor.status === 'pending' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-rose-500/10 text-rose-400'}`}>
+      {/* Monitors Table */}
+      {monitors.length > 0 && (
+        <div className="bg-dark-900 border border-dark-800 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <h3 className="text-xl font-black tracking-tight">Monitors</h3>
+            <button onClick={() => navigate('/sites')} className="text-xs font-bold text-brand hover:underline">View All →</button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-dark-800">
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Status</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Name</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider hidden md:table-cell">URL</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider text-right">Interval</th>
+                </tr>
+              </thead>
+              <tbody>
+                {monitors.map((monitor: any) => (
+                  <tr key={monitor.id} onClick={() => navigate(`/sites/${monitor.id}`)} className="border-b border-dark-800/50 hover:bg-dark-800/30 cursor-pointer transition-colors">
+                    <td className="py-4 pr-4">
+                      <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                        monitor.status === 'up' ? 'bg-brand/10 text-brand' : monitor.status === 'pending' ? 'bg-zinc-500/10 text-zinc-400' : 'bg-rose-500/10 text-rose-400'
+                      }`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${monitor.status === 'up' ? 'bg-brand' : monitor.status === 'pending' ? 'bg-zinc-500' : 'bg-rose-500'}`}></span>
                         {monitor.status === 'up' ? 'Online' : monitor.status === 'pending' ? 'Pending' : 'Down'}
-                      </div>
-                    </div>
-                  </button>
-                ))
-              )}
-            </div>
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4">
+                      <span className="font-bold text-zinc-100">{monitor.name}</span>
+                    </td>
+                    <td className="py-4 pr-4 hidden md:table-cell">
+                      <span className="text-xs text-zinc-500 font-mono truncate max-w-[300px] block">{monitor.url}</span>
+                    </td>
+                    <td className="py-4 text-right">
+                      <span className="text-xs text-zinc-500 font-mono">{monitor.interval_seconds}s</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
+      )}
 
-        {/* Right sidebar */}
-        <div className="space-y-8">
-          {/* Response Time Chart */}
-          {chartData.length > 0 && (
-            <div className="bg-dark-900 border border-dark-800 rounded-3xl p-8 shadow-2xl flex flex-col">
-              <div className="mb-6">
-                <h3 className="text-xl font-bold">Response Time</h3>
-                <p className="text-xs text-zinc-500 mt-1">Recent checks (ms)</p>
-              </div>
-              <div className="h-[250px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1e1e1e" />
-                    <XAxis dataKey="time" hide />
-                    <YAxis hide />
-                    <Tooltip contentStyle={{ backgroundColor: '#121212', border: '1px solid #2d2d2d', borderRadius: '12px' }} itemStyle={{ fontSize: '10px' }} />
-                    <Area type="monotone" dataKey="latency" stroke="#028D86" strokeWidth={2} fill="#028D86" fillOpacity={0.1} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          {/* Active Incidents */}
-          <div className={`${stats?.activeIncidents > 0 ? 'bg-rose-500/10 border-rose-500/20' : 'bg-brand'} rounded-3xl p-8 shadow-2xl text-white relative overflow-hidden`}>
-            {stats?.activeIncidents > 0 ? (
-              <>
-                <h4 className="text-lg font-black uppercase tracking-tight mb-2 text-rose-400">
-                  <AlertTriangle className="w-5 h-5 inline mr-2" />
-                  {stats.activeIncidents} Active Incident{stats.activeIncidents > 1 ? 's' : ''}
-                </h4>
-                <p className="text-zinc-400 text-xs mb-6 leading-relaxed">There are unresolved incidents that may affect services.</p>
-                <button onClick={() => navigate('/public-management')} className="w-full py-3 bg-rose-500 text-white rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Manage Incidents</button>
-              </>
+      {/* Active Incidents */}
+      <div className="bg-dark-900 border border-dark-800 rounded-3xl p-8 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-xl font-black tracking-tight">
+            {activeIncidents.length > 0 ? (
+              <span className="flex items-center gap-2 text-rose-400"><AlertTriangle className="w-5 h-5" /> Active Incidents ({activeIncidents.length})</span>
             ) : (
-              <>
-                <h4 className="text-lg font-black uppercase tracking-tight mb-2">All Systems Operational</h4>
-                <p className="text-white/70 text-xs mb-6 leading-relaxed">No active incidents. All monitors are running smoothly.</p>
-                <button onClick={() => navigate('/settings')} className="w-full py-3 bg-white text-brand rounded-xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all">Configure Notifications</button>
-              </>
+              <span className="flex items-center gap-2 text-brand"><CheckCircle className="w-5 h-5" /> No Active Incidents</span>
             )}
+          </h3>
+          <button onClick={() => navigate('/public-management')} className="text-xs font-bold text-brand hover:underline">Manage →</button>
+        </div>
+        {activeIncidents.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-dark-800">
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Impact</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Title</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider hidden md:table-cell">System</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider text-right">Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeIncidents.map((inc: any) => (
+                  <tr key={inc.id} className="border-b border-dark-800/50">
+                    <td className="py-4 pr-4">
+                      <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                        inc.impact_status === 'major' ? 'bg-rose-500/10 text-rose-400'
+                        : inc.impact_status === 'degraded' ? 'bg-yellow-400/10 text-yellow-400'
+                        : inc.impact_status === 'maintenance' ? 'bg-indigo-500/10 text-indigo-400'
+                        : 'bg-orange-500/10 text-orange-400'
+                      }`}>
+                        {inc.impact_status}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 font-bold text-zinc-100">{inc.title}</td>
+                    <td className="py-4 pr-4 hidden md:table-cell text-xs text-zinc-500">{inc.system_name || '—'}</td>
+                    <td className="py-4 text-right text-xs text-zinc-500 font-mono">{new Date(inc.created_at).toLocaleDateString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className="text-sm text-zinc-500">All systems are running smoothly. No active incidents.</p>
+        )}
+      </div>
+
+      {/* Recent Resolved Incidents */}
+      {resolvedIncidents.length > 0 && (
+        <div className="bg-dark-900 border border-dark-800 rounded-3xl p-8 shadow-2xl">
+          <h3 className="text-xl font-black tracking-tight mb-6">Recent Resolved Incidents</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b border-dark-800">
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Impact</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider">Title</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider hidden md:table-cell">System</th>
+                  <th className="pb-3 text-[10px] text-zinc-500 font-black uppercase tracking-wider text-right">Resolved</th>
+                </tr>
+              </thead>
+              <tbody>
+                {resolvedIncidents.slice(0, 10).map((inc: any) => (
+                  <tr key={inc.id} className="border-b border-dark-800/50">
+                    <td className="py-4 pr-4">
+                      <span className="px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-brand/10 text-brand">
+                        {inc.impact_status}
+                      </span>
+                    </td>
+                    <td className="py-4 pr-4 font-bold text-zinc-100">{inc.title}</td>
+                    <td className="py-4 pr-4 hidden md:table-cell text-xs text-zinc-500">{inc.system_name || '—'}</td>
+                    <td className="py-4 text-right text-xs text-zinc-500 font-mono">{inc.resolved_at ? new Date(inc.resolved_at).toLocaleDateString() : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Link, useLocation } from 'react-router-dom';
 import { checkSetupStatus, getToken, setToken, getMe } from './api';
-import { DashboardIcon, SettingsIcon, Globe, Activity, Shield } from './components/Icons';
+import { DashboardIcon, SettingsIcon, Globe, Activity, Shield, Bell, Users } from './components/Icons';
 
 const PublicStatus = lazy(() => import('./pages/PublicStatus'));
 const Login = lazy(() => import('./pages/Login'));
@@ -12,6 +12,7 @@ const SiteProfile = lazy(() => import('./pages/SiteProfile'));
 const Settings = lazy(() => import('./pages/Settings'));
 const PublicManagement = lazy(() => import('./pages/PublicManagement'));
 const UserManagement = lazy(() => import('./pages/UserManagement'));
+const Notifications = lazy(() => import('./pages/Notifications'));
 
 const Loader = () => (
   <div className="min-h-screen bg-dark-950 flex items-center justify-center">
@@ -24,7 +25,8 @@ const navItems = [
   { path: '/admindashboard', icon: DashboardIcon, label: 'Dashboard' },
   { path: '/sites', icon: Globe, label: 'Monitors' },
   { path: '/public-management', icon: Shield, label: 'Public Status' },
-  { path: '/users', icon: Activity, label: 'Users' },
+  { path: '/notifications', icon: Bell, label: 'Notifications' },
+  { path: '/users', icon: Users, label: 'Users' },
   { path: '/settings', icon: SettingsIcon, label: 'Settings' },
 ];
 
@@ -76,7 +78,7 @@ const Sidebar: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 const DashboardLayout: React.FC<{ children: React.ReactNode; onLogout: () => void }> = ({ children, onLogout }) => (
   <div className="min-h-screen bg-dark-950">
     <Sidebar onLogout={onLogout} />
-    <main className="ml-64 min-h-screen">
+    <main className="ml-64 min-h-screen p-8">
       {children}
     </main>
   </div>
@@ -165,6 +167,7 @@ const App: React.FC = () => {
           <Route path="/sites/:id" element={adminPage(SiteProfile)} />
           <Route path="/public-management" element={adminPage(PublicManagement)} />
           <Route path="/users" element={adminPage(UserManagement)} />
+          <Route path="/notifications" element={adminPage(Notifications)} />
           <Route path="/settings" element={adminPage(Settings)} />
 
           {/* Fallback */}
