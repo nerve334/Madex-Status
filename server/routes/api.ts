@@ -445,7 +445,16 @@ router.put('/settings', authMiddleware, (req: Request, res: Response) => {
 // ──────────────────────────────────── PUBLIC API (no auth) ────────────────────────────────────
 
 router.get('/public/status', (_req: Request, res: Response) => {
-  const systems = db.prepare('SELECT * FROM public_systems ORDER BY display_order ASC').all();
+  const systems = db.prepare('SELECT * FROM public_systems ORDER BY display_order ASC').all() as any[];
+
+  // Attach heartbeat history to each system
+  const systemsWithHeartbeats = systems.map((s: any) => {
+    const heartbeats = db.prepare(
+      'SELECT status, timestamp FROM public_system_heartbeats WHERE system_id = ? ORDER BY timestamp DESC LIMIT 30'
+    ).all(s.id);
+    return { ...s, heartbeats: heartbeats.reverse() };
+  });
+
   const incidents = db.prepare(`
     SELECT i.*, ps.name as system_name 
     FROM incidents i 
@@ -454,7 +463,7 @@ router.get('/public/status', (_req: Request, res: Response) => {
     LIMIT 50
   `).all();
 
-  const monitors = db.prepare('SELECT id, name, url, status FROM monitors WHERE active = 1').all() as any[];
+  const monitors = db.prepare('SELECT id, name, status FROM monitors WHERE active = 1').all() as any[];
   
   const monitorPublicData = monitors.map((m: any) => {
     const heartbeats = db.prepare(
@@ -469,7 +478,6 @@ router.get('/public/status', (_req: Request, res: Response) => {
     return {
       id: m.id,
       name: m.name,
-      url: m.url,
       status: m.status,
       uptime: Number(uptime),
       responseTime: latestRT,
