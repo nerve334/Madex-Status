@@ -69,10 +69,13 @@ export async function sendDiscordNotification(
       }),
     });
     if (!response.ok) {
-      console.error(`Discord webhook failed: ${response.status} ${response.statusText}`);
+      const body = await response.text().catch(() => '');
+      console.error(`[Discord] Webhook failed: ${response.status} ${response.statusText} — ${body}`);
+    } else {
+      console.log(`[Discord] Notification sent successfully for ${options.monitorName}`);
     }
   } catch (error) {
-    console.error('Discord notification failed:', error);
+    console.error('[Discord] Notification failed:', error);
   }
 }
 
