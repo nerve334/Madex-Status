@@ -38,7 +38,9 @@ function parseStatusRange(range: string): number[] {
   const parts = range.split(',').map(s => s.trim());
   for (const part of parts) {
     if (part.includes('-')) {
-      const [start, end] = part.split('-').map(Number);
+      const [a, b] = part.split('-').map(Number);
+      const start = Math.min(a, b);
+      const end = Math.max(a, b);
       for (let i = start; i <= end; i++) codes.push(i);
     } else {
       codes.push(Number(part));
