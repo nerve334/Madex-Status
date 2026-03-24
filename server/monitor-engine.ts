@@ -154,7 +154,7 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
   if (newStatus === 'down' && previousStatus !== 'down') {
     const currentRetry = monitor.retry_count + 1;
     if (currentRetry < monitor.max_retries) {
-      db.prepare('UPDATE monitors SET retry_count = ?, updated_at = datetime("now") WHERE id = ?')
+      db.prepare("UPDATE monitors SET retry_count = ?, updated_at = datetime('now') WHERE id = ?")
         .run(currentRetry, monitor.id);
       return; // Don't change status yet, retry
     }
@@ -165,7 +165,7 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
     db.prepare('UPDATE monitors SET retry_count = 0 WHERE id = ?').run(monitor.id);
   }
 
-  db.prepare('UPDATE monitors SET status = ?, updated_at = datetime("now"), retry_count = 0 WHERE id = ?')
+  db.prepare("UPDATE monitors SET status = ?, updated_at = datetime('now'), retry_count = 0 WHERE id = ?")
     .run(newStatus, monitor.id);
 
   // Send notifications on status change

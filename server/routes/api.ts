@@ -323,7 +323,7 @@ router.put('/incidents/:id', authMiddleware, (req: Request, res: Response) => {
   const { title, description, status, impact_status } = req.body;
   
   if (status === 'resolved') {
-    db.prepare('UPDATE incidents SET title=COALESCE(?,title), description=COALESCE(?,description), status=?, impact_status=COALESCE(?,impact_status), resolved_at=datetime("now") WHERE id=?')
+    db.prepare("UPDATE incidents SET title=COALESCE(?,title), description=COALESCE(?,description), status=?, impact_status=COALESCE(?,impact_status), resolved_at=datetime('now') WHERE id=?")
       .run(title, description, status, impact_status, req.params.id);
     
     // Restore public system to operational
