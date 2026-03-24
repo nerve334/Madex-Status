@@ -172,40 +172,37 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
   if (previousStatus !== newStatus) {
     console.log(`[Monitor] ${monitor.name}: status changed ${previousStatus} → ${newStatus}`);
 
-    if (previousStatus === 'pending') {
-      // First check after creation — still track downSince but skip notifications
-      if (newStatus === 'down') {
-        downSince.set(monitor.id, new Date());
+    const channels = db.prepare(
+      'SELECT * FROM notification_channels WHERE active = 1'
+    ).all() as NotificationChannel[];
+
+    console.log(`[Monitor] Found ${channels.length} active notification channel(s)`);
+
+    let duration: string | undefined;
+    if (newStatus === 'up' && downSince.has(monitor.id)) {
+      duration = formatDuration(Date.now() - downSince.get(monitor.id)!.getTime());
+      downSince.delete(monitor.id);
+    } else if (newStatus === 'down') {
+      downSince.set(monitor.id, new Date());
+    }
+
+    // Skip recovery notification on first check (pending → up is normal)
+    const skipUpNotification = previousStatus === 'pending' && newStatus === 'up';
+
+    for (const channel of channels) {
+      if (newStatus === 'down' && channel.notify_down) {
+        console.log(`[Monitor] Sending DOWN notification to channel ${channel.id}`);
+        await sendDiscordNotification(channel.webhook_url, {
+          monitorName: monitor.name,
+          url: monitor.url,
+          status: 'down',
+          statusCode,
+          message,
+        });
       }
-    } else {
-      const channels = db.prepare(
-        'SELECT * FROM notification_channels WHERE active = 1'
-      ).all() as NotificationChannel[];
-
-      console.log(`[Monitor] Found ${channels.length} active notification channel(s)`);
-
-      let duration: string | undefined;
-      if (newStatus === 'up' && downSince.has(monitor.id)) {
-        duration = formatDuration(Date.now() - downSince.get(monitor.id)!.getTime());
-        downSince.delete(monitor.id);
-      } else if (newStatus === 'down') {
-        downSince.set(monitor.id, new Date());
-      }
-
-      for (const channel of channels) {
-        if (newStatus === 'down' && channel.notify_down) {
-          console.log(`[Monitor] Sending DOWN notification to channel ${channel.id}`);
-          await sendDiscordNotification(channel.webhook_url, {
-            monitorName: monitor.name,
-            url: monitor.url,
-            status: 'down',
-            statusCode,
-            message,
-          });
-        }
-        if (newStatus === 'up' && channel.notify_up) {
-          console.log(`[Monitor] Sending UP notification to channel ${channel.id}`);
-          await sendDiscordNotification(channel.webhook_url, {
+      if (newStatus === 'up' && channel.notify_up && !skipUpNotification) {
+        console.log(`[Monitor] Sending UP notification to channel ${channel.id}`);
+        await sendDiscordNotification(channel.webhook_url, {
             monitorName: monitor.name,
             url: monitor.url,
             status: 'up',
@@ -215,7 +212,6 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
           });
         }
       }
-    }
   }
 }
 

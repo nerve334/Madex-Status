@@ -248,7 +248,7 @@ router.get('/monitors/:id/uptime', authMiddleware, (req: Request, res: Response)
   ).get(req.params.id, since) as any;
   
   const up = db.prepare(
-    'SELECT COUNT(*) as count FROM heartbeats WHERE monitor_id = ? AND timestamp >= ? AND status = "up"'
+    "SELECT COUNT(*) as count FROM heartbeats WHERE monitor_id = ? AND timestamp >= ? AND status = 'up'"
   ).get(req.params.id, since) as any;
 
   const percentage = total.count > 0 ? ((up.count / total.count) * 100).toFixed(2) : '100.00';
@@ -329,9 +329,9 @@ router.put('/incidents/:id', authMiddleware, (req: Request, res: Response) => {
     // Restore public system to operational
     const incident = db.prepare('SELECT system_id FROM incidents WHERE id = ?').get(req.params.id) as any;
     if (incident?.system_id) {
-      const activeIncidents = db.prepare('SELECT COUNT(*) as count FROM incidents WHERE system_id = ? AND status = "active" AND id != ?').get(incident.system_id, req.params.id) as any;
+      const activeIncidents = db.prepare("SELECT COUNT(*) as count FROM incidents WHERE system_id = ? AND status = 'active' AND id != ?").get(incident.system_id, req.params.id) as any;
       if (activeIncidents.count === 0) {
-        db.prepare('UPDATE public_systems SET status = "operational" WHERE id = ?').run(incident.system_id);
+        db.prepare("UPDATE public_systems SET status = 'operational' WHERE id = ?").run(incident.system_id);
       }
     }
   } else {
@@ -525,11 +525,11 @@ router.get('/dashboard/stats', authMiddleware, (_req: Request, res: Response) =>
   const downMonitors = enriched.filter((m: any) => m.status === 'down').length;
   const pendingMonitors = enriched.filter((m: any) => m.status === 'pending').length;
 
-  const activeIncidents = db.prepare('SELECT COUNT(*) as count FROM incidents WHERE status = "active"').get() as any;
+  const activeIncidents = db.prepare("SELECT COUNT(*) as count FROM incidents WHERE status = 'active'").get() as any;
 
   // Average response time across all monitors (last hour)
   const hourAgo = new Date(Date.now() - 3600000).toISOString();
-  const avgRT = db.prepare('SELECT AVG(response_time) as avg FROM heartbeats WHERE status = "up" AND timestamp >= ?').get(hourAgo) as any;
+  const avgRT = db.prepare("SELECT AVG(response_time) as avg FROM heartbeats WHERE status = 'up' AND timestamp >= ?").get(hourAgo) as any;
 
   // Get recent heartbeats for chart
   const recentHeartbeats = db.prepare(`
