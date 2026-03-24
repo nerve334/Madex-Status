@@ -142,11 +142,11 @@ const SiteProfile: React.FC = () => {
             <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
               {heartbeats.slice(0, 20).map((hb, i) => (
                 <div key={hb.id || i} className="flex items-center gap-4 p-4 bg-dark-950 border border-dark-800 rounded-2xl">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${hb.status === 'up' ? 'bg-brand' : 'bg-rose-500'}`}></span>
+                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${hb.status === 'up' ? 'bg-brand' : hb.status === 'retry' ? 'bg-amber-500' : 'bg-rose-500'}`}></span>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${hb.status === 'up' ? 'text-brand' : 'text-rose-500'}`}>
-                        {hb.status === 'up' ? 'UP' : 'DOWN'}
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${hb.status === 'up' ? 'text-brand' : hb.status === 'retry' ? 'text-amber-500' : 'text-rose-500'}`}>
+                        {hb.status === 'up' ? 'UP' : hb.status === 'retry' ? 'RETRY' : 'DOWN'}
                       </span>
                       {hb.status_code > 0 && <span className="text-[10px] font-mono text-zinc-600">HTTP {hb.status_code}</span>}
                       {hb.response_time > 0 && <span className="text-[10px] font-mono text-zinc-600">{hb.response_time}ms</span>}
@@ -174,7 +174,7 @@ const SiteProfile: React.FC = () => {
             {/* Mini status bar */}
             <div className="flex items-end gap-[2px] h-8 mt-6">
               {statusBar.map((s, i) => (
-                <div key={i} className={`flex-1 h-full rounded-[2px] ${s === 'up' ? 'bg-brand' : 'bg-rose-500'} hover:brightness-125 transition-all`} />
+                <div key={i} className={`flex-1 h-full rounded-[2px] ${s === 'up' ? 'bg-brand' : s === 'retry' ? 'bg-amber-500' : 'bg-rose-500'} hover:brightness-125 transition-all`} />
               ))}
             </div>
           </div>

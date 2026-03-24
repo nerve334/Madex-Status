@@ -55,7 +55,7 @@ export function initDatabase() {
     CREATE TABLE IF NOT EXISTS heartbeats (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       monitor_id INTEGER NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('up','down','pending')),
+      status TEXT NOT NULL CHECK(status IN ('up','down','pending','retry')),
       response_time INTEGER DEFAULT 0,
       status_code INTEGER DEFAULT 0,
       message TEXT DEFAULT '',
@@ -159,6 +159,31 @@ export function initDatabase() {
   } catch {
     db.exec(`ALTER TABLE public_system_heartbeats ADD COLUMN response_time INTEGER DEFAULT 0`);
     db.exec(`ALTER TABLE public_system_heartbeats ADD COLUMN message TEXT DEFAULT ''`);
+  }
+
+  // Migrate: add 'retry' status to heartbeats CHECK constraint
+  try {
+    // Test if 'retry' is allowed
+    db.prepare("INSERT INTO heartbeats (monitor_id, status) VALUES (-1, 'retry')").run();
+    db.prepare('DELETE FROM heartbeats WHERE monitor_id = -1').run();
+  } catch {
+    // Recreate table with updated CHECK constraint
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS heartbeats_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        monitor_id INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK(status IN ('up','down','pending','retry')),
+        response_time INTEGER DEFAULT 0,
+        status_code INTEGER DEFAULT 0,
+        message TEXT DEFAULT '',
+        timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (monitor_id) REFERENCES monitors(id) ON DELETE CASCADE
+      );
+      INSERT INTO heartbeats_new SELECT * FROM heartbeats;
+      DROP TABLE heartbeats;
+      ALTER TABLE heartbeats_new RENAME TO heartbeats;
+      CREATE INDEX IF NOT EXISTS idx_heartbeats_monitor_time ON heartbeats(monitor_id, timestamp DESC);
+    `);
   }
 
   // Insert default public systems if table is empty

@@ -24,7 +24,7 @@ const getStatusDot = (status: string) => {
 
 const getHeartbeatColor = (status: string) => {
   if (status === 'up' || status === 'operational') return 'bg-brand hover:bg-brand/80';
-  if (status === 'degraded') return 'bg-yellow-400 hover:bg-yellow-300';
+  if (status === 'degraded' || status === 'retry') return 'bg-amber-500 hover:bg-amber-400';
   if (status === 'pending') return 'bg-zinc-600 hover:bg-zinc-500';
   return 'bg-rose-500 hover:bg-rose-400';
 };

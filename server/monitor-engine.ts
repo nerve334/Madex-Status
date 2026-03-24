@@ -134,7 +134,26 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
     }
   }
 
-  // Record heartbeat
+  // Update monitor status
+  const previousStatus = monitor.status;
+  const newStatus = status;
+
+  // Handle retry logic
+  if (newStatus === 'down' && previousStatus !== 'down') {
+    const currentRetry = monitor.retry_count + 1;
+    if (currentRetry < monitor.max_retries) {
+      // Record heartbeat as 'retry' (amber) during retry attempts
+      db.prepare(
+        'INSERT INTO heartbeats (monitor_id, status, response_time, status_code, message) VALUES (?, ?, ?, ?, ?)'
+      ).run(monitor.id, 'retry', responseTime, statusCode, `Retry ${currentRetry}/${monitor.max_retries} — ${message}`);
+
+      db.prepare("UPDATE monitors SET retry_count = ?, updated_at = datetime('now') WHERE id = ?")
+        .run(currentRetry, monitor.id);
+      return; // Don't change status yet, retry
+    }
+  }
+
+  // Record heartbeat with final status
   db.prepare(
     'INSERT INTO heartbeats (monitor_id, status, response_time, status_code, message) VALUES (?, ?, ?, ?, ?)'
   ).run(monitor.id, status, responseTime, statusCode, message);
@@ -145,20 +164,6 @@ async function checkMonitor(monitor: MonitorRow): Promise<void> {
       SELECT id FROM heartbeats WHERE monitor_id = ? ORDER BY timestamp DESC LIMIT 1000
     )
   `).run(monitor.id, monitor.id);
-
-  // Update monitor status
-  const previousStatus = monitor.status;
-  const newStatus = status;
-
-  // Handle retry logic
-  if (newStatus === 'down' && previousStatus !== 'down') {
-    const currentRetry = monitor.retry_count + 1;
-    if (currentRetry < monitor.max_retries) {
-      db.prepare("UPDATE monitors SET retry_count = ?, updated_at = datetime('now') WHERE id = ?")
-        .run(currentRetry, monitor.id);
-      return; // Don't change status yet, retry
-    }
-  }
 
   // Reset retry count on success
   if (newStatus === 'up') {
