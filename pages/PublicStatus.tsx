@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getPublicStatus } from '../api';
-import { CheckCircle, Activity, Shield, Globe } from '../components/Icons';
+import { CheckCircle, Activity, Shield, Globe, Lock } from '../components/Icons';
 import InteractiveBackground from '../components/InteractiveBackground';
 
 type StatusType = 'operational' | 'degraded' | 'partial' | 'major' | 'maintenance';
@@ -34,14 +34,34 @@ const formatTime = (ts: string) => {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 };
 
+const PIN_STORAGE_KEY = 'madex_monitor_pin';
+
 const PublicStatus: React.FC = () => {
   const [data, setData] = useState<any>(null);
   const [now, setNow] = useState(new Date());
   const [loading, setLoading] = useState(true);
 
-  const fetchStatus = useCallback(async () => {
+  // PIN gate state
+  const [pinDigits, setPinDigits] = useState(['', '', '', '']);
+  const [pinError, setPinError] = useState(false);
+  const [pinShaking, setPinShaking] = useState(false);
+  const [pinLoading, setPinLoading] = useState(false);
+  const pinRefs = [
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+    useRef<HTMLInputElement>(null),
+  ];
+  const enteredPin = pinDigits.join('');
+
+  const fetchStatus = useCallback(async (pin?: string) => {
     try {
-      const result = await getPublicStatus();
+      const savedPin = pin ?? sessionStorage.getItem(PIN_STORAGE_KEY) ?? undefined;
+      const result = await getPublicStatus(savedPin);
+      // If a saved PIN was rejected, clear it
+      if (savedPin && result.settings?.monitorPinEnabled && !result.settings?.monitorPinUnlocked) {
+        sessionStorage.removeItem(PIN_STORAGE_KEY);
+      }
       setData(result);
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
@@ -49,10 +69,57 @@ const PublicStatus: React.FC = () => {
 
   useEffect(() => {
     fetchStatus();
-    const interval = setInterval(fetchStatus, 30000);
+    const interval = setInterval(() => fetchStatus(), 30000);
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => { clearInterval(interval); clearInterval(timer); };
   }, [fetchStatus]);
+
+  const handlePinInput = (index: number, value: string) => {
+    const digit = value.replace(/\D/g, '').slice(-1);
+    setPinError(false);
+    const next = [...pinDigits];
+    next[index] = digit;
+    setPinDigits(next);
+    if (digit && index < 3) {
+      pinRefs[index + 1].current?.focus();
+    }
+    // Auto-submit when all 4 digits filled
+    if (digit && index === 3) {
+      const full = [...next].join('');
+      if (full.length === 4) submitPin(full);
+    }
+  };
+
+  const handlePinKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Backspace' && !pinDigits[index] && index > 0) {
+      pinRefs[index - 1].current?.focus();
+    }
+    if (e.key === 'Enter' && enteredPin.length === 4) {
+      submitPin(enteredPin);
+    }
+  };
+
+  const submitPin = async (pin: string = enteredPin) => {
+    if (pin.length < 4 || pinLoading) return;
+    setPinLoading(true);
+    try {
+      const result = await getPublicStatus(pin);
+      if (result.settings?.monitorPinUnlocked) {
+        sessionStorage.setItem(PIN_STORAGE_KEY, pin);
+        setData(result);
+        setPinError(false);
+      } else {
+        setPinError(true);
+        setPinShaking(true);
+        setPinDigits(['', '', '', '']);
+        setTimeout(() => {
+          setPinShaking(false);
+          pinRefs[0].current?.focus();
+        }, 600);
+      }
+    } catch { setPinError(true); }
+    finally { setPinLoading(false); }
+  };
 
   if (loading) {
     return (
@@ -245,13 +312,73 @@ const PublicStatus: React.FC = () => {
           </section>
         )}
 
-        {/* Monitored Websites */}
-        {monitors.length > 0 && (
-          <section className="space-y-10 pointer-events-none">
-            <div className="flex items-center gap-4">
-              <h2 className="text-xs font-black uppercase tracking-[0.4em] text-zinc-600 flex items-center gap-3"><Globe className="w-4 h-4 text-brand" /> Monitored Services</h2>
-              <div className="h-px bg-dark-800 flex-1"></div>
+        {/* Monitored Services — PIN-gated or open */}
+        <section className="space-y-10 pointer-events-none">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xs font-black uppercase tracking-[0.4em] text-zinc-600 flex items-center gap-3">
+              {settings.monitorPinEnabled && !settings.monitorPinUnlocked
+                ? <Lock className="w-4 h-4 text-brand" />
+                : <Globe className="w-4 h-4 text-brand" />
+              }
+              Monitored Services
+            </h2>
+            <div className="h-px bg-dark-800 flex-1"></div>
+          </div>
+
+          {/* PIN Gate */}
+          {settings.monitorPinEnabled && !settings.monitorPinUnlocked ? (
+            <div className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[48px] p-16 flex flex-col items-center gap-8 pointer-events-auto">
+              {/* Lock icon */}
+              <div className="w-20 h-20 rounded-3xl bg-brand/10 border border-brand/20 flex items-center justify-center text-brand shadow-[0_0_40px_rgba(2,141,134,0.15)]">
+                <Lock className="w-10 h-10" />
+              </div>
+
+              <div className="text-center space-y-2">
+                <h3 className="text-2xl font-black text-white tracking-tight uppercase">Access Restricted</h3>
+                <p className="text-sm text-zinc-500 font-medium">Enter the 4-digit code to view monitored services</p>
+              </div>
+
+              {/* 4 digit inputs */}
+              <div
+                className="flex gap-4"
+                style={pinShaking ? { animation: 'shake 0.55s ease-in-out' } : undefined}
+              >
+                {[0, 1, 2, 3].map((i) => (
+                  <input
+                    key={i}
+                    ref={pinRefs[i]}
+                    type="password"
+                    inputMode="numeric"
+                    maxLength={1}
+                    value={pinDigits[i]}
+                    onChange={e => handlePinInput(i, e.target.value)}
+                    onKeyDown={e => handlePinKeyDown(i, e)}
+                    className={`w-16 h-20 text-center text-3xl font-black bg-dark-950 border-2 rounded-2xl outline-none transition-all duration-200 text-white caret-brand
+                      ${pinError
+                        ? 'border-rose-500 shadow-[0_0_0_3px_rgba(239,68,68,0.15)]'
+                        : 'border-dark-800 focus:border-brand focus:shadow-[0_0_0_3px_rgba(2,141,134,0.15)]'
+                      }`}
+                  />
+                ))}
+              </div>
+
+              {pinError && (
+                <p className="text-sm font-bold text-rose-400 -mt-4">Incorrect code. Please try again.</p>
+              )}
+
+              <button
+                onClick={() => submitPin()}
+                disabled={enteredPin.length < 4 || pinLoading}
+                className="px-12 py-4 bg-brand hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed text-white font-black uppercase tracking-widest text-xs rounded-2xl transition-all shadow-xl active:scale-95 flex items-center gap-3"
+              >
+                {pinLoading
+                  ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <Lock className="w-4 h-4" />
+                }
+                Unlock
+              </button>
             </div>
+          ) : monitors.length > 0 ? (
             <div className="space-y-6">
               {monitors.map((monitor: any) => {
                 const mhbs = monitor.heartbeats || [];
@@ -259,51 +386,48 @@ const PublicStatus: React.FC = () => {
                 const effectiveStatus = mRealHbs.length > 0 ? mRealHbs[mRealHbs.length - 1].status : monitor.status;
                 const isUp = effectiveStatus === 'up';
                 return (
-                <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
-                  <div className="flex flex-col gap-5">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-5">
-                        <div className={`p-3 rounded-2xl border border-white/5 ${isUp ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
-                          <Globe className="w-6 h-6" />
-                        </div>
-                        <div>
-                          <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
-                          <div className="flex items-center gap-4 mt-1">
-                            {monitor.responseTime > 0 && (
-                              <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
-                            )}
-                            <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
+                  <div key={monitor.id} className="bg-dark-900/60 backdrop-blur-sm border border-dark-800 rounded-[32px] p-8 hover:border-brand/30 transition-all duration-500 shadow-xl pointer-events-auto">
+                    <div className="flex flex-col gap-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-5">
+                          <div className={`p-3 rounded-2xl border border-white/5 ${isUp ? 'bg-brand/10 text-brand' : 'bg-rose-500/10 text-rose-500'}`}>
+                            <Globe className="w-6 h-6" />
+                          </div>
+                          <div>
+                            <h3 className="font-black text-xl text-zinc-100 tracking-tight">{monitor.name}</h3>
+                            <div className="flex items-center gap-4 mt-1">
+                              {monitor.responseTime > 0 && (
+                                <span className="text-xs text-zinc-500 font-mono">{monitor.responseTime}ms</span>
+                              )}
+                              <span className="text-xs text-zinc-600 font-mono">{monitor.uptime}% uptime</span>
+                            </div>
                           </div>
                         </div>
+                        <div className={`w-3.5 h-3.5 rounded-full ${isUp ? 'bg-brand' : 'bg-rose-500'} animate-pulse`}></div>
                       </div>
-                      <div className={`w-3.5 h-3.5 rounded-full ${isUp ? 'bg-brand' : 'bg-rose-500'} animate-pulse`}></div>
-                    </div>
-                    {/* Heartbeat bar */}
-                    <div className="grid grid-cols-[repeat(20,1fr)] gap-[3px] h-6">
-                      {(() => {
-                        const maxBars = 20;
-                        const padded = [
-                          ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
-                          ...mhbs,
-                        ].slice(-maxBars);
-                        return padded.map((hb: any, i: number) => (
-                          <div
-                            key={i}
-                            className={`rounded-[2px] cursor-default transition-all duration-150 ${
-                              hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)
-                            }`}
-                            title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
-                          />
-                        ));
-                      })()}
+                      <div className="grid grid-cols-[repeat(20,1fr)] gap-[3px] h-6">
+                        {(() => {
+                          const maxBars = 20;
+                          const padded = [
+                            ...Array.from({ length: Math.max(0, maxBars - mhbs.length) }).map(() => ({ status: 'empty', response_time: 0, timestamp: '' })),
+                            ...mhbs,
+                          ].slice(-maxBars);
+                          return padded.map((hb: any, idx: number) => (
+                            <div
+                              key={idx}
+                              className={`rounded-[2px] cursor-default transition-all duration-150 ${hb.status === 'empty' ? 'bg-zinc-800/40' : getHeartbeatColor(hb.status)}`}
+                              title={hb.status !== 'empty' ? `${formatTime(hb.timestamp)} — ${hb.status === 'up' ? 'Up' : 'Down'}${hb.response_time ? ` (${hb.response_time}ms)` : ''}` : ''}
+                            />
+                          ));
+                        })()}
+                      </div>
                     </div>
                   </div>
-                </div>
                 );
               })}
             </div>
-          </section>
-        )}
+          ) : null}
+        </section>
 
         {/* Footer */}
         <footer className="pt-32 pb-16 text-center border-t border-dark-800 pointer-events-none">

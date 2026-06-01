@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getSettings, updateSettings, getNotificationChannels, createNotificationChannel, updateNotificationChannel, deleteNotificationChannel, testNotificationWebhook } from '../api';
-import { Shield, Activity, Globe } from '../components/Icons';
+import { Shield, Activity, Globe, Lock } from '../components/Icons';
 
 const Settings: React.FC = () => {
   const [settings, setSettingsState] = useState<Record<string, string>>({});
@@ -82,6 +82,64 @@ const Settings: React.FC = () => {
           {isSaved ? '✓ Saved' : 'Save Settings'}
         </button>
       </div>
+
+      {/* Monitor Access PIN — full-width card above the grid */}
+      <section className="bg-dark-900 border border-dark-800 rounded-[32px] p-10 shadow-xl space-y-8">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-5">
+            <div className="w-14 h-14 bg-brand/10 rounded-2xl flex items-center justify-center text-brand">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-xl font-black text-white tracking-tight">Monitor Access PIN</h2>
+              <p className="text-xs text-zinc-500 mt-0.5">
+                {settings.monitor_pin?.length === 4
+                  ? 'PIN protection is active — visitors must enter the code to see monitored services'
+                  : 'No PIN set — monitored services are publicly visible'}
+              </p>
+            </div>
+          </div>
+          {settings.monitor_pin?.length === 4 && (
+            <span className="text-[9px] font-black uppercase tracking-widest text-brand bg-brand/10 border border-brand/20 px-4 py-2 rounded-xl">
+              Active
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-6 items-start">
+          <div className="flex-1 space-y-2">
+            <label className="text-[10px] font-black text-zinc-500 uppercase tracking-widest ml-1">
+              4-Digit Access Code
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              maxLength={4}
+              value={settings.monitor_pin || ''}
+              onChange={e => {
+                const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                setSettingsState({ ...settings, monitor_pin: val });
+              }}
+              className="w-full bg-dark-950 border border-dark-800 rounded-2xl px-6 py-4 focus:ring-1 focus:ring-brand outline-none text-white font-black text-2xl tracking-[0.5em] placeholder:text-zinc-700 placeholder:font-normal placeholder:text-base placeholder:tracking-normal"
+              placeholder="e.g. 1234"
+            />
+            <p className="text-[10px] text-zinc-600 ml-1">
+              Enter exactly 4 digits to enable PIN protection. Clear the field and save to disable.
+            </p>
+          </div>
+
+          {settings.monitor_pin?.length === 4 && (
+            <div className="pt-8">
+              <button
+                onClick={() => setSettingsState({ ...settings, monitor_pin: '' })}
+                className="px-6 py-4 bg-rose-500/10 text-rose-400 border border-rose-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-rose-500/20 transition-all"
+              >
+                Remove PIN
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Branding */}

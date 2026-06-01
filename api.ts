@@ -99,4 +99,5 @@ export const exportMonitors = () => request<any>('/monitors/export');
 export const importMonitors = (monitors: any[]) => request<any>('/monitors/import', { method: 'POST', body: JSON.stringify({ monitors }) });
 
 // ── Public (no auth) ──
-export const getPublicStatus = () => request<any>('/public/status');
+export const getPublicStatus = (pin?: string) =>
+  request<any>('/public/status' + (pin ? `?pin=${encodeURIComponent(pin)}` : ''));

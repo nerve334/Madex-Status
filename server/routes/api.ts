@@ -452,7 +452,7 @@ router.put('/settings', authMiddleware, (req: Request, res: Response) => {
 
 // ──────────────────────────────────── PUBLIC API (no auth) ────────────────────────────────────
 
-router.get('/public/status', (_req: Request, res: Response) => {
+router.get('/public/status', (req: Request, res: Response) => {
   const systems = db.prepare('SELECT * FROM public_systems ORDER BY display_order ASC').all() as any[];
 
   // Attach heartbeat history to each system
@@ -497,16 +497,24 @@ router.get('/public/status', (_req: Request, res: Response) => {
   const settingsMap: Record<string, string> = {};
   for (const s of settings) settingsMap[s.key] = s.value;
 
+  // Monitor PIN gate
+  const monitorPin = settingsMap.monitor_pin || '';
+  const pinEnabled = monitorPin.length === 4;
+  const providedPin = (req.query.pin as string) || '';
+  const pinUnlocked = !pinEnabled || providedPin === monitorPin;
+
   res.json({
     systems: systemsWithHeartbeats,
     incidents,
     providerIncidents: getProviderIncidents(),
-    monitors: monitorPublicData,
+    monitors: pinUnlocked ? monitorPublicData : [],
     settings: {
       brand_name: settingsMap.brand_name || 'Madex Status',
       logo: settingsMap.logo || '',
       icon: settingsMap.icon || '',
       favicon: settingsMap.favicon || '',
+      monitorPinEnabled: pinEnabled,
+      monitorPinUnlocked: pinUnlocked,
     },
   });
 });
